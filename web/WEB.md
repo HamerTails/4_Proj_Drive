@@ -1,3 +1,9 @@
-# 4_Proj_Drive
+# Client Web – SUPFILE
 
-WEB du Projet
+Le client web permet :
+- Connexion / inscription
+- Navigation dans les dossiers
+- Upload et prévisualisation des fichiers
+- Partage public et interne
+
+Technologie : Next.js

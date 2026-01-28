@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: supfile
+      POSTGRES_USER: supfile
+      POSTGRES_PASSWORD: supfile
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: ./api
+    env_file:
+      - .env
+    volumes:
+      - storage_data:/data
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+
+  web:
+    build: ./web
+    depends_on:
+      - api
+    ports:
+      - "3001:3000"
+
+volumes:
+  db_data:
+  storage_data:

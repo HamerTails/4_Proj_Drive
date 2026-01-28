@@ -1,3 +1,11 @@
-# 4_Proj_Drive
+# Documentation technique – SUPFILE
 
-DOCS du Projet
+## Prérequis
+
+- Docker
+- Docker Compose
+
+## Déploiement
+
+```bash
+docker compose up --build

@@ -1,3 +1,9 @@
-# 4_Proj_Drive
+# Client Mobile – SUPFILE
 
-MOBILE du Projet
+Application mobile Android développée en React Native.
+
+Fonctionnalités prévues :
+- Connexion utilisateur
+- Consultation des fichiers
+- Upload simple
+- Accès aux liens partagés
