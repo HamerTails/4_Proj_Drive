@@ -125,15 +125,18 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100 MB
 });
 
-// Middleware d'authentification JWT
+// Middleware d'authentification JWT (accepte aussi ?token=...)
 const authenticateToken = (req, res, next) => {
+  let token = null;
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query.token) {
+    token = req.query.token;
+  }
   if (!token) {
     return res.status(401).json({ error: "Token manquant" });
   }
-
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ error: "Token invalide" });
@@ -566,6 +569,32 @@ app.get("/api/files/:id/download", authenticateToken, async (req, res) => {
     res.download(filePath, file.name);
   } catch (error) {
     console.error("Erreur téléchargement:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// Prévisualisation d'un fichier (image/PDF)
+app.get("/api/files/:id/preview", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      "SELECT * FROM nodes WHERE id = $1 AND user_id = $2 AND type = 'file'",
+      [id, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Fichier non trouvé" });
+    }
+    const file = result.rows[0];
+    const filePath = path.join(STORAGE_PATH, file.storage_path);
+    // Autoriser seulement images et PDF
+    if (!file.mime_type.startsWith('image/') && file.mime_type !== 'application/pdf') {
+      return res.status(415).json({ error: "Type de fichier non supporté pour la prévisualisation" });
+    }
+    res.setHeader('Content-Type', file.mime_type);
+    res.setHeader('Content-Disposition', 'inline; filename="' + file.name + '"');
+    require('fs').createReadStream(filePath).pipe(res);
+  } catch (error) {
+    console.error("Erreur preview:", error);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });

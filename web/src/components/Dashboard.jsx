@@ -12,6 +12,7 @@ function Dashboard({ onLogout }) {
   const [renameName, setRenameName] = useState('');
   const [uploadProgress, setUploadProgress] = useState(null);
   const fileInputRef = useRef();
+  const [previewFile, setPreviewFile] = useState(null);
   
   const user = authService.getCurrentUser();
 
@@ -102,6 +103,8 @@ function Dashboard({ onLogout }) {
   const handleNodeClick = (node) => {
     if (node.type === 'folder') {
       setCurrentFolder(node.id);
+    } else if (node.mime_type && (node.mime_type.startsWith('image/') || node.mime_type === 'application/pdf')) {
+      setPreviewFile(node);
     } else {
       window.open(fileService.downloadFile(node.id), '_blank');
     }
@@ -243,6 +246,22 @@ function Dashboard({ onLogout }) {
                 <button type="submit" className="btn">Renommer</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {previewFile && (
+        <div className="modal-overlay" onClick={() => setPreviewFile(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto'}}>
+            <h3>Prévisualisation : {previewFile.name}</h3>
+            {previewFile.mime_type.startsWith('image/') ? (
+              <img src={`http://localhost:3000/api/files/${previewFile.id}/preview?token=${localStorage.getItem('token')}`} alt={previewFile.name} style={{maxWidth: '100%', maxHeight: '70vh'}} />
+            ) : previewFile.mime_type === 'application/pdf' ? (
+              <iframe src={`http://localhost:3000/api/files/${previewFile.id}/preview?token=${localStorage.getItem('token')}`} title={previewFile.name} style={{width: '80vw', height: '70vh', border: 'none'}} />
+            ) : null}
+            <div className="modal-actions">
+              <button onClick={() => setPreviewFile(null)}>Fermer</button>
+            </div>
           </div>
         </div>
       )}
