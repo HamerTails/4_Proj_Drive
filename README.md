@@ -3,6 +3,7 @@
 SUPFILE est une plateforme de stockage cloud permettant aux utilisateurs de stocker, organiser, prévisualiser et partager leurs fichiers en ligne. 
 
 ## Architecture
+
  - API : Node.js / Express
  - Client Web : Next.js
  - Client Mobile : React Native
