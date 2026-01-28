@@ -7,11 +7,64 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs").promises;
 const { v4: uuidv4 } = require("uuid");
+const passport = require("passport");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
 require("dotenv").config();
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const STORAGE_PATH = "/data";
+
+// =====================
+// Passport Google OAuth2
+// =====================
+passport.use(new GoogleStrategy({
+  clientID: process.env.OAUTH_CLIENT_ID,
+  clientSecret: process.env.OAUTH_CLIENT_SECRET,
+  callbackURL: process.env.OAUTH_CALLBACK_URL || "http://localhost:3000/api/auth/google/callback"
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    const email = profile.emails[0].value.toLowerCase();
+    const provider_id = profile.id;
+    const provider = 'google';
+    // Vérifier si un utilisateur existe déjà avec ce provider_id
+    const userRes = await pool.query(
+      "SELECT * FROM users WHERE provider = $1 AND provider_id = $2",
+      [provider, provider_id]
+    );
+    let user;
+    if (userRes.rows.length > 0) {
+      user = userRes.rows[0];
+    } else {
+      // Vérifier si un utilisateur existe déjà avec cet email (inscription classique)
+      const emailRes = await pool.query(
+        "SELECT * FROM users WHERE email = $1",
+        [email]
+      );
+      if (emailRes.rows.length > 0) {
+        // Associer le provider à l'utilisateur existant
+        const updateRes = await pool.query(
+          "UPDATE users SET provider = $1, provider_id = $2 WHERE id = $3 RETURNING *",
+          [provider, provider_id, emailRes.rows[0].id]
+        );
+        user = updateRes.rows[0];
+      } else {
+        // Sinon, créer un nouvel utilisateur
+        const insertRes = await pool.query(
+          "INSERT INTO users (email, provider, provider_id) VALUES ($1, $2, $3) RETURNING *",
+          [email, provider, provider_id]
+        );
+        user = insertRes.rows[0];
+      }
+    }
+    return done(null, user);
+  } catch (err) {
+    return done(err);
+  }
+}));
+
+app.use(passport.initialize());
 
 // Configuration de la base de données
 const pool = new Pool({
@@ -27,10 +80,28 @@ pool.query("SELECT NOW()", (err, res) => {
   }
 });
 
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// =====================
+// Routes Google OAuth2
+// =====================
+app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+
+app.get("/api/auth/google/callback", passport.authenticate("google", { session: false, failureRedirect: "/?error=oauth" }), (req, res) => {
+  // Générer un JWT pour l'utilisateur
+  const user = req.user;
+  const token = jwt.sign(
+    { id: user.id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+  // Rediriger vers le client web avec le token en query
+  const redirectUrl = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:3001/login?token=" + token;
+  res.redirect(redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + "token=" + token);
+});
 
 // Configuration Multer pour upload
 const storage = multer.diskStorage({

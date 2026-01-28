@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../services/api';
 
@@ -7,6 +7,16 @@ function Login({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Gestion du token dans l'URL (login automatique après OAuth)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('token', token);
+      onLogin();
+    }
+  }, [onLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,6 +68,17 @@ function Login({ onLogin }) {
             {loading ? 'Connexion...' : 'Se connecter'}
           </button>
         </form>
+
+        <button
+          type="button"
+          className="btn"
+          style={{ background: '#fff', color: '#000', border: '1px solid #ccc', marginTop: 10 }}
+          onClick={() => {
+            window.location.href = 'http://localhost:3000/api/auth/google';
+          }}
+        >
+          Connexion Google
+        </button>
 
         <div className="auth-switch">
           Pas encore de compte ? <Link to="/register">S'inscrire</Link>
