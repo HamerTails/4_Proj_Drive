@@ -2,4 +2,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-CMD ["sh", "-c", "echo Web service placeholder running && sleep infinity"]
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev", "--", "--host"]
