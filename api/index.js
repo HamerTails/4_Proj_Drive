@@ -10,7 +10,7 @@ const { v4: uuidv4 } = require("uuid");
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 require("dotenv").config();
-
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -596,6 +596,165 @@ app.get("/api/files/:id/preview", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Erreur preview:", error);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// ============================================
+// PARTAGE EXTERNE VIA LIENS PUBLICS
+// ============================================
+
+
+// Générer un lien public pour un fichier ou dossier
+app.post("/api/shares", authenticateToken, async (req, res) => {
+  try {
+    const { node_id, expires_at } = req.body;
+    // Vérifier que le node appartient à l'utilisateur
+    const nodeRes = await pool.query(
+      "SELECT * FROM nodes WHERE id = $1 AND user_id = $2",
+      [node_id, req.user.id]
+    );
+    if (nodeRes.rows.length === 0) {
+      return res.status(404).json({ error: "Fichier ou dossier non trouvé" });
+    }
+    // Générer un token unique
+    const token = crypto.randomBytes(24).toString('hex');
+    // Enregistrer le partage
+    const shareRes = await pool.query(
+      "INSERT INTO shares (node_id, token, expires_at) VALUES ($1, $2, $3) RETURNING *",
+      [node_id, token, expires_at || null]
+    );
+    res.status(201).json({
+      link: `${process.env.PUBLIC_SHARE_URL || 'http://localhost:3000/api/public/'}${token}`,
+      share: shareRes.rows[0]
+    });
+  } catch (error) {
+    console.error("Erreur création lien public:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// Accès public à un fichier ou dossier via token
+app.get("/api/public/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { file: fileId } = req.query;
+    const shareRes = await pool.query(
+      "SELECT * FROM shares WHERE token = $1 AND (expires_at IS NULL OR expires_at > NOW())",
+      [token]
+    );
+    if (shareRes.rows.length === 0) {
+      return res.status(404).json({ error: "Lien public invalide ou expiré" });
+    }
+    const share = shareRes.rows[0];
+    // Récupérer le node partagé
+    const nodeRes = await pool.query(
+      "SELECT * FROM nodes WHERE id = $1",
+      [share.node_id]
+    );
+    if (nodeRes.rows.length === 0) {
+      return res.status(404).json({ error: "Fichier ou dossier non trouvé" });
+    }
+    const node = nodeRes.rows[0];
+
+    // Si ?file=ID est présent, vérifier que ce fichier est bien enfant du dossier partagé
+    if (fileId) {
+      // On autorise uniquement les fichiers enfants du dossier partagé
+      const fileRes = await pool.query(
+        "SELECT * FROM nodes WHERE id = $1 AND parent_id = $2 AND type = 'file'",
+        [fileId, node.id]
+      );
+      if (fileRes.rows.length === 0) {
+        return res.status(404).json({ error: "Fichier non trouvé ou accès interdit" });
+      }
+      const fileNode = fileRes.rows[0];
+      const filePath = path.join(STORAGE_PATH, fileNode.storage_path);
+      res.setHeader('Content-Type', fileNode.mime_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline; filename="' + fileNode.name + '"');
+      require('fs').createReadStream(filePath).pipe(res);
+      return;
+    }
+
+    if (node.type === 'file') {
+      // Télécharger ou prévisualiser le fichier
+      const filePath = path.join(STORAGE_PATH, node.storage_path);
+      res.setHeader('Content-Type', node.mime_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline; filename="' + node.name + '"');
+      require('fs').createReadStream(filePath).pipe(res);
+    } else {
+      // Lister le contenu du dossier partagé
+      const childrenRes = await pool.query(
+        "SELECT * FROM nodes WHERE parent_id = $1 ORDER BY type DESC, name ASC",
+        [node.id]
+      );
+      res.json({ folder: node, children: childrenRes.rows });
+    }
+  } catch (error) {
+    console.error("Erreur accès public:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// =====================
+// PARTAGE INTERNE ENTRE UTILISATEURS
+// =====================
+
+// Partager un node avec un utilisateur (par email)
+app.post('/api/internal-shares', authenticateToken, async (req, res) => {
+  try {
+    const { node_id, email } = req.body;
+    if (!node_id || !email) return res.status(400).json({ error: 'node_id et email requis' });
+    // Trouver l'utilisateur destinataire
+    const userRes = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    const to_user_id = userRes.rows[0].id;
+    // Vérifier que le node existe et appartient à l'utilisateur courant
+    const nodeRes = await pool.query('SELECT * FROM nodes WHERE id = $1 AND user_id = $2', [node_id, req.user.id]);
+    if (nodeRes.rows.length === 0) return res.status(403).json({ error: 'Accès refusé' });
+    // Vérifier doublon
+    const already = await pool.query('SELECT * FROM internal_shares WHERE node_id = $1 AND to_user_id = $2', [node_id, to_user_id]);
+    if (already.rows.length > 0) return res.status(409).json({ error: 'Déjà partagé avec cet utilisateur' });
+    // Créer le partage
+    await pool.query('INSERT INTO internal_shares (node_id, from_user_id, to_user_id) VALUES ($1, $2, $3)', [node_id, req.user.id, to_user_id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erreur partage interne:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Lister les nodes partagés avec l'utilisateur connecté
+app.get('/api/internal-shares', authenticateToken, async (req, res) => {
+  try {
+    const sharesRes = await pool.query(
+      `SELECT s.id as share_id, n.*,
+        u.email as shared_by_email, s.created_at as shared_at
+       FROM internal_shares s
+       JOIN nodes n ON s.node_id = n.id
+       JOIN users u ON s.from_user_id = u.id
+       WHERE s.to_user_id = $1
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(sharesRes.rows);
+  } catch (err) {
+    console.error('Erreur liste partages internes:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Oublier un partage (supprimer de la liste "Partagés avec moi")
+app.delete('/api/internal-shares/:shareId', authenticateToken, async (req, res) => {
+  try {
+    const { shareId } = req.params;
+    // Vérifier que le partage existe et appartient à l'utilisateur
+    const shareRes = await pool.query('SELECT * FROM internal_shares WHERE id = $1 AND to_user_id = $2', [shareId, req.user.id]);
+    if (shareRes.rows.length === 0) return res.status(404).json({ error: 'Partage non trouvé' });
+    // Supprimer le partage
+    await pool.query('DELETE FROM internal_shares WHERE id = $1', [shareId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erreur suppression partage interne:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { authService, fileService } from '../services/api';
+import axios from 'axios';
 
 function Dashboard({ onLogout }) {
   const [nodes, setNodes] = useState([]);
@@ -13,11 +14,20 @@ function Dashboard({ onLogout }) {
   const [uploadProgress, setUploadProgress] = useState(null);
   const fileInputRef = useRef();
   const [previewFile, setPreviewFile] = useState(null);
+  const [shareNode, setShareNode] = useState(null);
+  const [shareLink, setShareLink] = useState('');
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareMode, setShareMode] = useState('public');
+  const [internalShareEmail, setInternalShareEmail] = useState('');
+  const [internalShareStatus, setInternalShareStatus] = useState('');
+  const [sharedWithMe, setSharedWithMe] = useState([]);
+  const [sharedWithMeLoading, setSharedWithMeLoading] = useState(false);
   
   const user = authService.getCurrentUser();
 
   useEffect(() => {
     loadNodes();
+    loadSharedWithMe();
   }, [currentFolder]);
 
   const loadNodes = async () => {
@@ -36,6 +46,34 @@ function Dashboard({ onLogout }) {
       console.error('Erreur chargement:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSharedWithMe = async () => {
+    setSharedWithMeLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('http://localhost:3000/api/internal-shares', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSharedWithMe(res.data);
+    } catch (error) {
+      console.error('Erreur chargement partages:', error);
+    } finally {
+      setSharedWithMeLoading(false);
+    }
+  };
+
+  const handleForgetShare = async (shareId) => {
+    if (!confirm('Retirer ce fichier de votre espace partagé ?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`http://localhost:3000/api/internal-shares/${shareId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadSharedWithMe();
+    } catch (error) {
+      alert('Erreur: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -97,6 +135,47 @@ function Dashboard({ onLogout }) {
       loadNodes();
     } catch (error) {
       alert('Erreur suppression: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleShare = async (node) => {
+    setShareNode(node);
+    setShareLink('');
+    setShareMode('public');
+    setInternalShareEmail('');
+    setInternalShareStatus('');
+  };
+
+  const generatePublicLink = async () => {
+    setShareLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.post('http://localhost:3000/api/shares', { node_id: shareNode.id }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const apiUrl = res.data.link;
+      const tokenPart = apiUrl.split('/').pop();
+      const frontendBase = window.location.origin;
+      setShareLink(`${frontendBase}/public/${tokenPart}`);
+    } catch (err) {
+      setShareLink('Erreur lors de la génération du lien');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleInternalShare = async (e) => {
+    e.preventDefault();
+    setInternalShareStatus('Envoi...');
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post('http://localhost:3000/api/internal-shares', { node_id: shareNode.id, email: internalShareEmail }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setInternalShareStatus('Partagé avec succès !');
+      setInternalShareEmail('');
+    } catch (err) {
+      setInternalShareStatus(err.response?.data?.error || 'Erreur');
     }
   };
 
@@ -190,6 +269,40 @@ function Dashboard({ onLogout }) {
                     <button className="danger" onClick={() => handleDelete(node.id, node.name)}>
                       Supprimer
                     </button>
+                    <button onClick={() => handleShare(node)}>
+                      Partager
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Section Partagés avec moi */}
+        <div style={{ marginTop: 40, paddingTop: 30, borderTop: '2px solid #ccc' }}>
+          <h2 style={{ marginBottom: 20 }}>📥 Partagés avec moi</h2>
+          {sharedWithMeLoading ? (
+            <div className="empty-state">Chargement...</div>
+          ) : sharedWithMe.length === 0 ? (
+            <div className="empty-state">Aucun fichier partagé avec vous</div>
+          ) : (
+            <div className="files-list">
+              {sharedWithMe.map((item) => (
+                <div key={item.share_id} className="file-item">
+                  <div className="file-icon" onClick={() => handleNodeClick(item)}>
+                    {item.type === 'folder' ? '📁' : '📄'}
+                  </div>
+                  <div className="file-info" onClick={() => handleNodeClick(item)}>
+                    <div className="file-name">{item.name}</div>
+                    <div className="file-meta">
+                      Partagé par {item.shared_by_email} • {item.type === 'file' && formatFileSize(item.size)}
+                    </div>
+                  </div>
+                  <div className="file-actions">
+                    <button onClick={() => handleForgetShare(item.share_id)}>
+                      Oublier
+                    </button>
                   </div>
                 </div>
               ))}
@@ -261,6 +374,86 @@ function Dashboard({ onLogout }) {
             ) : null}
             <div className="modal-actions">
               <button onClick={() => setPreviewFile(null)}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shareNode && (
+        <div className="modal-overlay" onClick={() => { setShareNode(null); setShareLink(''); setInternalShareEmail(''); setInternalShareStatus(''); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <h3>Partager : {shareNode.name}</h3>
+            
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20, borderBottom: '1px solid #ccc' }}>
+              <button 
+                onClick={() => setShareMode('public')} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: shareMode === 'public' ? '#000' : 'transparent', 
+                  color: shareMode === 'public' ? '#fff' : '#000',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderBottom: shareMode === 'public' ? '2px solid #000' : 'none'
+                }}
+              >
+                Public
+              </button>
+              <button 
+                onClick={() => setShareMode('private')} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: shareMode === 'private' ? '#000' : 'transparent', 
+                  color: shareMode === 'private' ? '#fff' : '#000',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderBottom: shareMode === 'private' ? '2px solid #000' : 'none'
+                }}
+              >
+                Privé
+              </button>
+            </div>
+
+            {shareMode === 'public' ? (
+              <div>
+                <p style={{ marginBottom: 15, color: '#666' }}>Générer un lien public accessible sans compte.</p>
+                {shareLoading ? (
+                  <div>Génération du lien...</div>
+                ) : shareLink ? (
+                  <div>
+                    <input type="text" value={shareLink} readOnly style={{ width: '100%', padding: 8, marginBottom: 10 }} onFocus={e => e.target.select()} />
+                    <a href={shareLink} target="_blank" rel="noopener noreferrer" style={{ color: '#00f', textDecoration: 'underline' }}>Ouvrir le lien</a>
+                  </div>
+                ) : (
+                  <button onClick={generatePublicLink} className="btn">Générer le lien</button>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p style={{ marginBottom: 15, color: '#666' }}>Partager avec un utilisateur inscrit par email.</p>
+                <form onSubmit={handleInternalShare}>
+                  <div className="form-group">
+                    <label>Email de l'utilisateur</label>
+                    <input
+                      type="email"
+                      value={internalShareEmail}
+                      onChange={e => setInternalShareEmail(e.target.value)}
+                      placeholder="utilisateur@example.com"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  {internalShareStatus && (
+                    <div style={{ marginBottom: 10, color: internalShareStatus.includes('succès') ? 'green' : 'red' }}>
+                      {internalShareStatus}
+                    </div>
+                  )}
+                  <button type="submit" className="btn">Partager</button>
+                </form>
+              </div>
+            )}
+
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button onClick={() => { setShareNode(null); setShareLink(''); setInternalShareEmail(''); setInternalShareStatus(''); }}>Fermer</button>
             </div>
           </div>
         </div>
