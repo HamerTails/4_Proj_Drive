@@ -1,3 +1,8 @@
+// =====================
+// IMPORTS
+// =====================
+const app = express();
+
 const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -9,15 +14,104 @@ const fs = require("fs").promises;
 const { v4: uuidv4 } = require("uuid");
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const crypto = require("crypto");
 require("dotenv").config();
-const crypto = require('crypto');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const STORAGE_PATH = "/data";
+
+const trashRoutes = require("./routes/trash");
+app.use("/api/trash", trashRoutes);
+
+app.listen(PORT, () => {
+  console.log(`Serveur démarré sur http://localhost:${PORT}`);
+});
+
 
 // =====================
-// Passport Google OAuth2
+// CONFIGURATION DE BASE
+// =====================
+const PORT = process.env.PORT || 3000;
+
+const STORAGE_PATH = path.join(__dirname, "data");
+
+// =====================
+// BASE DE DONNÉES
+// =====================
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+pool.query("SELECT NOW()", (err, res) => {
+  if (err) console.error("Erreur de connexion à la base:", err);
+  else console.log("Connecté à PostgreSQL:", res.rows[0].now);
+});
+
+// =====================
+// MIDDLEWARES
+// =====================
+const corsOptions = {
+  origin: "http://localhost:3001", // frontend
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
+
+// =====================
+// MULTER POUR UPLOAD
+// =====================
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const userFolder = path.join(STORAGE_PATH, `user_${req.user.id}`);
+    try {
+      await fs.mkdir(userFolder, { recursive: true });
+      cb(null, userFolder);
+    } catch (err) {
+      cb(err);
+    }
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+});
+
+// =====================
+// JWT AUTH
+// =====================
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: "Mot de passe incorrect" });
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+
+const authenticateToken = require("../middleware/auth");
+
+// =====================
+// PASSPORT GOOGLE
 // =====================
 passport.use(new GoogleStrategy({
   clientID: process.env.OAUTH_CLIENT_ID,
@@ -28,29 +122,23 @@ passport.use(new GoogleStrategy({
     const email = profile.emails[0].value.toLowerCase();
     const provider_id = profile.id;
     const provider = 'google';
-    // Vérifier si un utilisateur existe déjà avec ce provider_id
+
+    let user;
     const userRes = await pool.query(
       "SELECT * FROM users WHERE provider = $1 AND provider_id = $2",
       [provider, provider_id]
     );
-    let user;
-    if (userRes.rows.length > 0) {
-      user = userRes.rows[0];
-    } else {
-      // Vérifier si un utilisateur existe déjà avec cet email (inscription classique)
-      const emailRes = await pool.query(
-        "SELECT * FROM users WHERE email = $1",
-        [email]
-      );
+
+    if (userRes.rows.length > 0) user = userRes.rows[0];
+    else {
+      const emailRes = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
       if (emailRes.rows.length > 0) {
-        // Associer le provider à l'utilisateur existant
         const updateRes = await pool.query(
           "UPDATE users SET provider = $1, provider_id = $2 WHERE id = $3 RETURNING *",
           [provider, provider_id, emailRes.rows[0].id]
         );
         user = updateRes.rows[0];
       } else {
-        // Sinon, créer un nouvel utilisateur
         const insertRes = await pool.query(
           "INSERT INTO users (email, provider, provider_id) VALUES ($1, $2, $3) RETURNING *",
           [email, provider, provider_id]
@@ -63,89 +151,6 @@ passport.use(new GoogleStrategy({
     return done(err);
   }
 }));
-
-app.use(passport.initialize());
-
-// Configuration de la base de données
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-// Test de connexion
-pool.query("SELECT NOW()", (err, res) => {
-  if (err) {
-    console.error("Erreur de connexion a la base de donnees:", err);
-  } else {
-    console.log("Connecte a PostgreSQL:", res.rows[0].now);
-  }
-});
-
-
-// Middlewares
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-// =====================
-// Routes Google OAuth2
-// =====================
-app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-
-app.get("/api/auth/google/callback", passport.authenticate("google", { session: false, failureRedirect: "/?error=oauth" }), (req, res) => {
-  // Générer un JWT pour l'utilisateur
-  const user = req.user;
-  const token = jwt.sign(
-    { id: user.id, email: user.email },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-  // Rediriger vers le client web avec le token en query
-  const redirectUrl = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:3001/login?token=" + token;
-  res.redirect(redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + "token=" + token);
-});
-
-// Configuration Multer pour upload
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const userFolder = path.join(STORAGE_PATH, `user_${req.user.id}`);
-    try {
-      await fs.mkdir(userFolder, { recursive: true });
-      cb(null, userFolder);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
-
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 } // 100 MB
-});
-
-// Middleware d'authentification JWT (accepte aussi ?token=...)
-const authenticateToken = (req, res, next) => {
-  let token = null;
-  const authHeader = req.headers["authorization"];
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.split(" ")[1];
-  } else if (req.query.token) {
-    token = req.query.token;
-  }
-  if (!token) {
-    return res.status(401).json({ error: "Token manquant" });
-  }
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: "Token invalide" });
-    }
-    req.user = user;
-    next();
-  });
-};
-
 // ============================================
 // ROUTES D'AUTHENTIFICATION
 // ============================================
