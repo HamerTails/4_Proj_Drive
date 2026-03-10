@@ -6,11 +6,11 @@ const path = require("path");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
 
-const STORAGE_PATH = path.join(__dirname, "../data");
+const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
 /**
- * B1-1 & B1-7 : Liste les nodes (fichiers/dossiers)
- * Gère le filtrage par parent et exclut la corbeille.
+ * GET /api/nodes
+ * Liste les nodes d'un dossier (exclut la corbeille)
  */
 router.get("/", authenticateToken, async (req, res) => {
     const parentId = req.query.parent_id || null;
@@ -31,8 +31,35 @@ router.get("/", authenticateToken, async (req, res) => {
 });
 
 /**
- * B1-8 : Détails techniques d'un node
- * Retourne les infos BDD + infos réelles du système de fichiers (fs.stat)
+ * GET /api/nodes/breadcrumb?id=xxx
+ * Retourne le chemin complet vers un dossier
+ */
+router.get("/breadcrumb", authenticateToken, async (req, res) => {
+    const { id } = req.query;
+    if (!id) return res.json({ path: [] });
+
+    try {
+        const result = await pool.query(
+            `WITH RECURSIVE parents AS (
+                SELECT id, name, parent_id FROM nodes WHERE id = $1 AND user_id = $2
+                UNION
+                SELECT n.id, n.name, n.parent_id FROM nodes n
+                INNER JOIN parents p ON p.parent_id = n.id
+                WHERE n.user_id = $2
+            )
+            SELECT id, name FROM parents ORDER BY id ASC`,
+            [id, req.user.id]
+        );
+        res.json({ path: result.rows });
+    } catch (err) {
+        console.error("Erreur breadcrumb:", err);
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+/**
+ * GET /api/nodes/:id/details
+ * Détails techniques d'un node (B1-8)
  */
 router.get("/:id/details", authenticateToken, async (req, res) => {
     try {
@@ -47,7 +74,7 @@ router.get("/:id/details", authenticateToken, async (req, res) => {
         const node = result.rows[0];
         let stats = {};
 
-        if (node.type === 'file') {
+        if (node.type === 'file' && node.storage_path) {
             const fullPath = path.join(STORAGE_PATH, node.storage_path);
             const fileInfo = await fs.stat(fullPath).catch(() => null);
             if (fileInfo) {
@@ -66,61 +93,139 @@ router.get("/:id/details", authenticateToken, async (req, res) => {
 });
 
 /**
- * B1-1 : Déplacer vers la corbeille (Soft Delete)
+ * POST /api/nodes/folder
+ * Créer un nouveau dossier
+ */
+router.post("/folder", authenticateToken, async (req, res) => {
+    try {
+        const { name, parent_id } = req.body;
+        if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
+
+        const result = await pool.query(
+            `INSERT INTO nodes (user_id, parent_id, type, name)
+             VALUES ($1, $2, 'folder', $3) RETURNING *`,
+            [req.user.id, parent_id || null, name.trim()]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error("Erreur création dossier:", err);
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+/**
+ * PUT /api/nodes/:id/rename
+ * Renommer un node
+ */
+router.put("/:id/rename", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
+
+        const result = await pool.query(
+            `UPDATE nodes SET name = $1
+             WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE
+             RETURNING *`,
+            [name.trim(), id, req.user.id]
+        );
+
+        if (result.rows.length === 0) return res.status(404).json({ error: "Node non trouvé" });
+        res.json({ message: "Renommé avec succès", node: result.rows[0] });
+    } catch (err) {
+        console.error("Erreur renommage:", err);
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+/**
+ * PUT /api/nodes/:id/move
+ * Déplacer un node dans un autre dossier
+ */
+router.put("/:id/move", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { parent_id } = req.body;
+
+        // Protection anti-boucle : vérifier que la destination n'est pas un enfant du node
+        if (parent_id) {
+            const loopCheck = await pool.query(
+                `WITH RECURSIVE children AS (
+                    SELECT id FROM nodes WHERE id = $1
+                    UNION
+                    SELECT n.id FROM nodes n INNER JOIN children c ON c.id = n.parent_id
+                )
+                SELECT id FROM children WHERE id = $2`,
+                [id, parent_id]
+            );
+            if (loopCheck.rows.length > 0) {
+                return res.status(400).json({ error: "Impossible : déplacement circulaire détecté" });
+            }
+        }
+
+        const result = await pool.query(
+            `UPDATE nodes SET parent_id = $1
+             WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE
+             RETURNING *`,
+            [parent_id || null, id, req.user.id]
+        );
+
+        if (result.rows.length === 0) return res.status(404).json({ error: "Node non trouvé" });
+        res.json({ message: "Déplacé avec succès", node: result.rows[0] });
+    } catch (err) {
+        console.error("Erreur déplacement:", err);
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+/**
+ * DELETE /api/nodes/:id
+ * Soft delete — déplace vers la corbeille (B1-1)
  */
 router.delete("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query(
-            `UPDATE nodes 
-             SET is_trashed = TRUE, trashed_at = NOW() 
-             WHERE id = $1 AND user_id = $2 
+            `UPDATE nodes SET is_trashed = TRUE, trashed_at = NOW()
+             WHERE id = $1 AND user_id = $2
              RETURNING *`,
             [id, req.user.id]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Node non trouvé" });
-        }
-
-        res.json({ message: "Node déplacé vers la corbeille", node: result.rows[0] });
+        if (result.rows.length === 0) return res.status(404).json({ error: "Node non trouvé" });
+        res.json({ message: "Déplacé vers la corbeille", node: result.rows[0] });
     } catch (err) {
         console.error("Erreur soft delete:", err);
         res.status(500).json({ error: "Erreur serveur" });
     }
 });
 
-// --- LOGIQUE DE NETTOYAGE AUTOMATIQUE ---
-
+// -----------------------------------------------------------------------
+// CRON : nettoyage automatique corbeille (30 jours)
+// -----------------------------------------------------------------------
 const deleteExpiredTrash = async () => {
     try {
-        // 1. Trouver les nodes à supprimer (plus de 30 jours)
         const result = await pool.query(
             "SELECT * FROM nodes WHERE is_trashed = TRUE AND trashed_at < NOW() - INTERVAL '30 days'"
         );
-
         if (result.rows.length === 0) return;
 
         for (const node of result.rows) {
-            // 2. Supprimer le fichier physique si c'est un fichier
             if (node.type === "file" && node.storage_path) {
                 const filePath = path.join(STORAGE_PATH, node.storage_path);
-                await fs.unlink(filePath).catch((err) => {
-                    console.warn(`Fichier physique déjà absent: ${node.storage_path}`);
+                await fs.unlink(filePath).catch(() => {
+                    console.warn(`[CRON] Fichier physique absent: ${node.storage_path}`);
                 });
             }
-
-            // 3. Supprimer l'entrée en BDD
             await pool.query("DELETE FROM nodes WHERE id = $1", [node.id]);
         }
-        console.log(`[CRON] Corbeille nettoyée : ${result.rows.length} éléments supprimés.`);
+        console.log(`[CRON] Corbeille nettoyée : ${result.rows.length} élément(s) supprimé(s)`);
     } catch (err) {
         console.error("[CRON] Erreur nettoyage corbeille:", err);
     }
 };
 
-// Exécuter le nettoyage une fois au démarrage, puis toutes les 24h
-deleteExpiredTrash(); 
+deleteExpiredTrash();
 setInterval(deleteExpiredTrash, 24 * 60 * 60 * 1000);
 
 module.exports = router;

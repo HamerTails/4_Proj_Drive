@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -23,7 +23,6 @@ export const authService = {
     }
     return response.data;
   },
-
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
     if (response.data.token) {
@@ -32,17 +31,14 @@ export const authService = {
     }
     return response.data;
   },
-
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
-
   getCurrentUser: () => {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
-
   isAuthenticated: () => {
     return !!localStorage.getItem('token');
   }
@@ -55,23 +51,22 @@ export const fileService = {
     return response.data.nodes;
   },
 
+  // Breadcrumb — endpoint correct
   getPath: async (nodeId) => {
-    const response = await api.get(`/nodes/${nodeId}/path`);
+    const response = await api.get('/nodes/breadcrumb', { params: { id: nodeId } });
     return response.data.path;
   },
 
+  // Création dossier — endpoint correct
   createFolder: async (name, parentId = null) => {
-    const response = await api.post('/folders', { name, parent_id: parentId });
-    return response.data.folder;
+    const response = await api.post('/nodes/folder', { name, parent_id: parentId });
+    return response.data;
   },
 
   uploadFile: async (file, parentId = null, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
-    if (parentId) {
-      formData.append('parent_id', parentId);
-    }
-
+    if (parentId) formData.append('parent_id', parentId);
     const response = await api.post('/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (progressEvent) => {
@@ -81,11 +76,12 @@ export const fileService = {
         }
       }
     });
-    return response.data.file;
+    return response.data;
   },
 
+  // Renommage — endpoint correct avec /rename
   renameNode: async (nodeId, name) => {
-    const response = await api.put(`/nodes/${nodeId}`, { name });
+    const response = await api.put(`/nodes/${nodeId}/rename`, { name });
     return response.data.node;
   },
 
@@ -99,7 +95,23 @@ export const fileService = {
   },
 
   downloadFile: (nodeId) => {
-    return `${API_URL}/files/${nodeId}/download`;
+    const token = localStorage.getItem('token');
+    return `${API_URL}/files/${nodeId}/download?token=${token}`;
+  },
+
+  previewUrl: (nodeId) => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/files/${nodeId}/preview?token=${token}`;
+  },
+
+  streamUrl: (nodeId) => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/files/${nodeId}/stream?token=${token}`;
+  },
+
+  downloadFolderUrl: (folderId) => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/files/folder/${folderId}/download?token=${token}`;
   }
 };
 
