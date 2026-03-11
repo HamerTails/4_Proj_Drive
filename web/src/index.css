@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* pas d'import externe - on utilise les polices système */
 
-/* ============================================================
-   DESIGN TOKENS — CSS Variables
-   ============================================================ */
+/* variables globales */
 :root {
   /* Couleurs light */
   --bg-primary: #ffffff;
@@ -74,15 +72,13 @@
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
 }
 
-/* ============================================================
-   RESET & BASE
-   ============================================================ */
+/* reset de base */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: 14px; }
+html { font-size: 17px; }
 
 body {
-  font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: var(--bg-secondary);
   color: var(--text-primary);
   line-height: 1.5;
@@ -90,9 +86,7 @@ body {
   transition: background var(--transition), color var(--transition);
 }
 
-/* ============================================================
-   LAYOUT
-   ============================================================ */
+/* layout principal */
 .app-layout {
   display: flex;
   height: 100vh;
@@ -116,8 +110,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 8px 8px;
 }
 
 .sidebar-logo-icon {
@@ -129,13 +122,13 @@ body {
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   flex-shrink: 0;
 }
 
 .sidebar-logo-text {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.3px;
@@ -146,7 +139,7 @@ body {
 }
 
 .sidebar-section-label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -162,7 +155,7 @@ body {
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 15.5px;
   font-weight: 450;
   transition: all var(--transition);
   text-decoration: none;
@@ -213,7 +206,7 @@ body {
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -221,7 +214,7 @@ body {
 .sidebar-user-info { flex: 1; min-width: 0; }
 
 .sidebar-user-email {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -251,7 +244,7 @@ body {
 }
 
 .topbar-title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
   flex-shrink: 0;
@@ -270,7 +263,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 0 12px 0 36px;
-  font-size: 13.5px;
+  font-size: 15.5px;
   color: var(--text-primary);
   font-family: inherit;
   transition: all var(--transition);
@@ -318,7 +311,7 @@ body {
 }
 
 .breadcrumb-item {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 2px 4px;
@@ -333,7 +326,7 @@ body {
 .breadcrumb-item:hover { color: var(--text-primary); }
 .breadcrumb-item.current { color: var(--text-primary); font-weight: 500; cursor: default; }
 
-.breadcrumb-sep { color: var(--text-tertiary); font-size: 13px; }
+.breadcrumb-sep { color: var(--text-tertiary); font-size: 15px; }
 
 /* TOOLBAR */
 .toolbar {
@@ -347,9 +340,7 @@ body {
 .toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
 
-/* ============================================================
-   BUTTONS
-   ============================================================ */
+/* boutons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -357,7 +348,7 @@ body {
   padding: 0 14px;
   height: 34px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 15.5px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -408,9 +399,7 @@ body {
 }
 .btn-icon:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-/* ============================================================
-   FILE LIST
-   ============================================================ */
+/* liste de fichiers */
 .files-section { margin-bottom: 8px; }
 
 .files-section-header {
@@ -422,7 +411,7 @@ body {
 }
 
 .files-section-title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -438,14 +427,14 @@ body {
 
 .files-table-header {
   display: grid;
-  grid-template-columns: 1fr 70px 100px 230px;
+  grid-template-columns: 1fr 70px 160px 170px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
 }
 
 .files-table-header span {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -454,7 +443,7 @@ body {
 
 .file-row {
   display: grid;
-  grid-template-columns: 1fr 70px 100px 230px;
+  grid-template-columns: 1fr 70px 160px 170px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -481,7 +470,7 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .file-icon-wrap.folder { background: #fef3c7; }
@@ -500,7 +489,7 @@ body {
 [data-theme="dark"] .file-icon-wrap.text   { background: #0f2e1f; }
 
 .file-name {
-  font-size: 13.5px;
+  font-size: 15.5px;
   font-weight: 450;
   color: var(--text-primary);
   white-space: nowrap;
@@ -509,9 +498,9 @@ body {
 }
 
 .file-size, .file-date, .file-type-label {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-tertiary);
-  font-family: 'Geist Mono', monospace;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
 }
 
 .file-actions {
@@ -522,9 +511,7 @@ body {
   transition: opacity var(--transition);
 }
 
-/* ============================================================
-   UPLOAD PROGRESS
-   ============================================================ */
+/* toast upload */
 .upload-toast {
   position: fixed;
   bottom: 24px;
@@ -545,7 +532,7 @@ body {
 }
 
 .upload-toast-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 8px;
@@ -565,9 +552,7 @@ body {
   transition: width 200ms ease;
 }
 
-/* ============================================================
-   MODALS
-   ============================================================ */
+/* modals */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -610,7 +595,7 @@ body {
 }
 
 .modal-title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -643,14 +628,12 @@ body {
   justify-content: center;
 }
 
-/* ============================================================
-   FORM ELEMENTS
-   ============================================================ */
+/* formulaires */
 .form-group { margin-bottom: 16px; }
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 6px;
@@ -663,7 +646,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 12px;
-  font-size: 13.5px;
+  font-size: 15.5px;
   color: var(--text-primary);
   font-family: inherit;
   transition: all var(--transition);
@@ -678,9 +661,7 @@ body {
 
 .form-input::placeholder { color: var(--text-tertiary); }
 
-/* ============================================================
-   EMPTY STATE
-   ============================================================ */
+/* état vide */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -692,26 +673,24 @@ body {
 }
 
 .empty-state-icon {
-  font-size: 36px;
+  font-size: 38px;
   margin-bottom: 12px;
   opacity: 0.5;
 }
 
 .empty-state-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
 
 .empty-state-desc {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-tertiary);
 }
 
-/* ============================================================
-   DRAG & DROP ZONE
-   ============================================================ */
+/* drag & drop */
 .drop-zone { position: relative; }
 
 .drop-zone.dragging::after {
@@ -724,16 +703,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   color: var(--accent);
   z-index: 10;
   pointer-events: none;
 }
 
-/* ============================================================
-   QUOTA BAR
-   ============================================================ */
+/* barre de quota */
 .quota-bar {
   padding: 12px 16px;
   margin: 8px;
@@ -744,7 +721,7 @@ body {
 .quota-bar-label {
   display: flex;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
@@ -766,9 +743,7 @@ body {
 .quota-fill.warning { background: var(--warning); }
 .quota-fill.danger  { background: var(--danger); }
 
-/* ============================================================
-   TOGGLE THEME
-   ============================================================ */
+/* toggle thème */
 .theme-toggle {
   width: 34px;
   height: 34px;
@@ -784,17 +759,13 @@ body {
 }
 .theme-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-/* ============================================================
-   SCROLLBAR
-   ============================================================ */
+/* scrollbar custom */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
+/* responsive mobile */
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .files-table-header { display: none; }
@@ -804,9 +775,7 @@ body {
   .page-content { padding: 16px; }
 }
 
-/* ============================================================
-   SHARE TABS
-   ============================================================ */
+/* onglets partage */
 .tab-bar {
   display: flex;
   border-bottom: 1px solid var(--border);
@@ -815,7 +784,7 @@ body {
 
 .tab-btn {
   padding: 10px 16px;
-  font-size: 13.5px;
+  font-size: 15.5px;
   font-weight: 500;
   color: var(--text-secondary);
   background: none;
@@ -830,15 +799,13 @@ body {
 .tab-btn:hover { color: var(--text-primary); }
 .tab-btn.active { color: var(--accent-text); border-bottom-color: var(--accent); }
 
-/* ============================================================
-   BADGE
-   ============================================================ */
+/* badges */
 .badge {
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
   border-radius: 99px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -852,8 +819,8 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 20px;
-  font-family: 'Geist Mono', monospace;
-  font-size: 13px;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 15px;
   line-height: 1.7;
   color: var(--text-primary);
   white-space: pre-wrap;
@@ -866,3 +833,58 @@ body {
 
 /* Upload hidden input */
 .upload-input { display: none; }
+
+/* ============================================================
+   SIDEBAR RESIZER
+   ============================================================ */
+.sidebar {
+  position: relative;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background 150ms;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:active {
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+/* Séparateur sidebar unique */
+.sidebar-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  width: 100%;
+}
+
+/* actions visibles au hover en vue grille */
+div:hover > .grid-actions {
+  opacity: 1 !important;
+}
+
+/* responsive tablette */
+@media (max-width: 1024px) {
+  .files-table-header span:nth-child(3),
+  .file-row > span.file-type-label { display: none; }
+}
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  .search-bar { max-width: 100%; }
+  .btn span, .btn-secondary span { display: none; }
+  .files-table-header { display: none; }
+  .file-row { grid-template-columns: 1fr auto; }
+  .file-size, .file-date, .file-type-label { display: none; }
+  .file-actions { opacity: 1; }
+  .page-content { padding: 12px; }
+}

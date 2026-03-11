@@ -15,10 +15,40 @@ const formatDate = (iso) => {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+// modal de confirmation/info réutilisable — plus de confirm() ni alert() natifs
+function Dialog({ title, message, type = 'confirm', onConfirm, onClose }) {
+  const isConfirm = type === 'confirm';
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">{title}</span>
+          <button className="btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{message}</p>
+        </div>
+        <div className="modal-footer">
+          {isConfirm ? (
+            <>
+              <button className="btn btn-secondary" onClick={onClose}>Annuler</button>
+              <button className="btn btn-danger" onClick={() => { onConfirm(); onClose(); }} autoFocus>Confirmer</button>
+            </>
+          ) : (
+            <button className="btn btn-primary" onClick={onClose} autoFocus>OK</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Trash() {
-  const [items, setItems]   = useState([]);
+  const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('token');
+  const [dialog, setDialog]   = useState(null); // { title, message, type, onConfirm }
+
+  const token  = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => { load(); }, []);
@@ -32,38 +62,86 @@ export default function Trash() {
     finally { setLoading(false); }
   };
 
+  // helper pour ouvrir une confirmation
+  const confirm = (title, message, onConfirm) => {
+    setDialog({ title, message, type: 'confirm', onConfirm });
+  };
+
+  // helper pour ouvrir une info/erreur
+  const notify = (title, message) => {
+    setDialog({ title, message, type: 'info' });
+  };
+
   const restore = async (id) => {
     try {
       await axios.put(`${API_URL}/api/trash/${id}/restore`, {}, { headers });
       load();
-    } catch (e) { alert('Erreur : ' + (e.response?.data?.error || e.message)); }
+    } catch (e) {
+      notify('Erreur', e.response?.data?.error || e.message);
+    }
   };
 
-  const deletePermanent = async (id, name) => {
-    if (!confirm(`Supprimer définitivement "${name}" ? Cette action est irréversible.`)) return;
-    try {
-      await axios.delete(`${API_URL}/api/trash/${id}/permanent`, { headers });
-      load();
-    } catch (e) { alert('Erreur : ' + (e.response?.data?.error || e.message)); }
+  const deletePermanent = (id, name) => {
+    confirm(
+      'Supprimer définitivement',
+      `"${name}" sera supprimé définitivement. Cette action est irréversible.`,
+      async () => {
+        try {
+          await axios.delete(`${API_URL}/api/trash/${id}/permanent`, { headers });
+          load();
+        } catch (e) {
+          notify('Erreur', e.response?.data?.error || e.message);
+        }
+      }
+    );
   };
 
-  const emptyTrash = async () => {
-    if (!confirm(`Vider la corbeille ? Tous les éléments seront supprimés définitivement.`)) return;
-    try {
-      await Promise.all(items.map(i => axios.delete(`${API_URL}/api/trash/${i.id}/permanent`, { headers })));
-      load();
-    } catch (e) { alert('Erreur lors du vidage'); }
+  const emptyTrash = () => {
+    confirm(
+      'Vider la corbeille',
+      `Les ${items.length} élément${items.length > 1 ? 's' : ''} seront supprimés définitivement. Cette action est irréversible.`,
+      async () => {
+        const errors = [];
+        for (const item of items) {
+          try {
+            await axios.delete(`${API_URL}/api/trash/${item.id}/permanent`, { headers });
+          } catch (e) {
+            errors.push(item.name);
+          }
+        }
+        load();
+        if (errors.length > 0) {
+          notify('Suppression partielle', `Ces éléments n'ont pas pu être supprimés : ${errors.join(', ')}`);
+        }
+      }
+    );
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Topbar */}
+
+      {/* dialog custom */}
+      {dialog && (
+        <Dialog
+          title={dialog.title}
+          message={dialog.message}
+          type={dialog.type}
+          onConfirm={dialog.onConfirm}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {/* topbar */}
       <div className="topbar">
         <span className="topbar-title">Corbeille</span>
         {items.length > 0 && (
           <div className="topbar-actions">
             <button className="btn btn-danger" onClick={emptyTrash}>
-              🗑 Vider la corbeille
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+              Vider la corbeille
             </button>
           </div>
         )}
@@ -107,10 +185,12 @@ export default function Trash() {
                   <span className="file-size">{formatSize(item.size)}</span>
                   <span className="file-date">{formatDate(item.trashed_at)}</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <button className="btn btn-secondary" style={{ height: 28, fontSize: 12 }} onClick={() => restore(item.id)}>
+                    <button className="btn btn-secondary" style={{ height: 28, fontSize: 12 }}
+                      onClick={() => restore(item.id)}>
                       ↩ Restaurer
                     </button>
-                    <button className="btn btn-danger" style={{ height: 28, fontSize: 12 }} onClick={() => deletePermanent(item.id, item.name)}>
+                    <button className="btn btn-danger" style={{ height: 28, fontSize: 12 }}
+                      onClick={() => deletePermanent(item.id, item.name)}>
                       Supprimer
                     </button>
                   </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/api';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -26,15 +26,54 @@ const Icon = ({ name, size = 16 }) => {
   );
 };
 
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 420;
+const SIDEBAR_DEFAULT = 240;
+
 // ─── Layout principal ──────────────────────────────────────────
 function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTheme }) {
   const user = authService.getCurrentUser();
   const initial = user?.email?.[0]?.toUpperCase() || '?';
 
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => parseInt(localStorage.getItem('sidebarWidth')) || SIDEBAR_DEFAULT
+  );
+  const isDragging = useRef(false);
+
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault();
+    isDragging.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const onMouseMove = useCallback((e) => {
+    if (!isDragging.current) return;
+    const newWidth = Math.min(Math.max(e.clientX, SIDEBAR_MIN), SIDEBAR_MAX);
+    setSidebarWidth(newWidth);
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    setSidebarWidth(w => { localStorage.setItem('sidebarWidth', w); return w; });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [onMouseMove, onMouseUp]);
+
   return (
     <div className="app-layout">
       {/* SIDEBAR */}
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth, position: "relative" }}>
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">S</div>
           <span className="sidebar-logo-text">SUPFile</span>
@@ -95,6 +134,13 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
             <Icon name="logout" size={14} />
           </div>
         </div>
+        {/* ── Poignée de redimensionnement ── */}
+        <div
+          style={{ position: 'absolute', top: 0, right: 0, width: 5, height: '100%', cursor: 'col-resize', zIndex: 10 }}
+          onMouseDown={onMouseDown}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.35)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        />
       </aside>
 
       {/* CONTENU */}
