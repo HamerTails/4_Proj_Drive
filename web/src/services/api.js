@@ -14,6 +14,25 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ── Intercepteur réponse global (F1-19) ─────────────────────
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // token expiré ou invalide → déconnexion
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+    if (!error.response) {
+      // erreur réseau
+      window.__toastError?.('Erreur réseau — vérifiez votre connexion.');
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authService = {
   register: async (email, password) => {
     const response = await api.post('/auth/register', { email, password });

@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const QUOTA_MAX = 30 * 1024 ** 3; // 30 Go en bytes
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/api';
 import Login from './components/Login';
@@ -6,6 +10,9 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import PublicView from './components/PublicView';
 import Trash from './components/Trash';
+import Settings from './components/Settings';
+import DashboardHome from './components/DashboardHome';
+import ToastContainer from './components/Toast';
 
 // ─── Icônes SVG inline légères ────────────────────────────────
 const Icon = ({ name, size = 16 }) => {
@@ -34,6 +41,15 @@ const SIDEBAR_DEFAULT = 240;
 function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTheme }) {
   const user = authService.getCurrentUser();
   const initial = user?.email?.[0]?.toUpperCase() || '?';
+
+  const [quota, setQuota] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    axios.get(`${API_URL}/api/storage/usage`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => setQuota(r.data))
+      .catch(() => {});
+  }, []);
 
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem('sidebarWidth')) || SIDEBAR_DEFAULT
@@ -83,6 +99,13 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
           <div className="sidebar-section-label">Navigation</div>
 
           <button
+            className={`sidebar-item ${activeView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => onNavigate('dashboard')}
+          >
+            <Icon name="dashboard" size={15} /> Tableau de bord
+          </button>
+
+          <button
             className={`sidebar-item ${activeView === 'files' ? 'active' : ''}`}
             onClick={() => onNavigate('files')}
           >
@@ -115,6 +138,27 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
         </div>
 
         <div className="sidebar-bottom">
+          {/* ── Jauge quota ── */}
+          {quota !== null && (() => {
+            const used = quota.storage_used || 0;
+            const pct  = Math.min((used / QUOTA_MAX) * 100, 100);
+            const color = pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warning)' : 'var(--accent)';
+            const fmt = (b) => b < 1024**3 ? (b/1024**2).toFixed(0)+' Mo' : (b/1024**3).toFixed(1)+' Go';
+            return (
+              <div style={{ padding: '6px 12px 10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
+                  <span>{fmt(used)} utilisés</span>
+                  <span>30 Go</span>
+                </div>
+                <div style={{ height: 5, background: 'var(--bg-tertiary)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 800ms ease' }} />
+                </div>
+                <div style={{ fontSize: 11, color: pct > 90 ? 'var(--danger)' : 'var(--text-tertiary)', marginTop: 4 }}>
+                  {pct.toFixed(1)}% — {fmt(QUOTA_MAX - used)} disponible
+                </div>
+              </div>
+            );
+          })()}
           {/* Toggle thème */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px 8px' }}>
             <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
@@ -154,7 +198,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
 // ─── App principale ────────────────────────────────────────────
 function AppContent() {
   const [isAuth, setIsAuth] = useState(authService.isAuthenticated());
-  const [activeView, setActiveView] = useState('files');
+  const [activeView, setActiveView] = useState('dashboard');
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
@@ -190,11 +234,12 @@ function AppContent() {
 
   const renderView = () => {
     switch (activeView) {
+      case 'dashboard': return <DashboardHome onNavigateFiles={() => setActiveView('files')} />;
       case 'files':    return <Dashboard theme={theme} />;
       case 'trash':    return <Trash />;
       case 'shared':   return <Dashboard theme={theme} sharedOnly />;
-      case 'settings': return <div className="page-content"><div className="empty-state"><div className="empty-state-icon">⚙️</div><div className="empty-state-title">Paramètres</div><div className="empty-state-desc">Bientôt disponible</div></div></div>;
-      default:         return <Dashboard theme={theme} />;
+      case 'settings': return <Settings theme={theme} toggleTheme={toggleTheme} />;
+      default:         return <DashboardHome onNavigateFiles={() => setActiveView('files')} />;
     }
   };
 
@@ -219,6 +264,7 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastContainer />
       <AppContent />
     </BrowserRouter>
   );

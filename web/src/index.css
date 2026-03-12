@@ -427,7 +427,7 @@ body {
 
 .files-table-header {
   display: grid;
-  grid-template-columns: 1fr 70px 160px 170px;
+  grid-template-columns: 1fr 70px 420px 150px 170px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
@@ -441,9 +441,13 @@ body {
   letter-spacing: 0.4px;
 }
 
+.files-table-header span:nth-child(3) {
+  padding-left: 20px;
+}
+
 .file-row {
   display: grid;
-  grid-template-columns: 1fr 70px 160px 170px;
+  grid-template-columns: 1fr 70px 420px 150px 170px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -501,6 +505,14 @@ body {
   font-size: 14.5px;
   color: var(--text-tertiary);
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+}
+
+.file-type-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+  padding-left: 20px;
 }
 
 .file-actions {
@@ -873,8 +885,12 @@ div:hover > .grid-actions {
 
 /* responsive tablette */
 @media (max-width: 1024px) {
-  .files-table-header span:nth-child(3),
-  .file-row > span.file-type-label { display: none; }
+  .files-table-header span:nth-child(2),
+  .files-table-header span:nth-child(4),
+  .file-row > span.file-type-label,
+  .file-row > span.file-date { display: none; }
+  .files-table-header { grid-template-columns: 1fr 70px 170px; }
+  .file-row { grid-template-columns: 1fr 70px 170px; }
 }
 
 @media (max-width: 768px) {
@@ -887,4 +903,21 @@ div:hover > .grid-actions {
   .file-size, .file-date, .file-type-label { display: none; }
   .file-actions { opacity: 1; }
   .page-content { padding: 12px; }
+}
+
+/* ── Corbeille : grille 4 colonnes ── */
+.trash-table .files-table-header,
+.trash-table .file-row {
+  grid-template-columns: 1fr 90px 160px 260px;
+}
+.trash-table .files-table-header span:nth-child(3) {
+  padding-left: 0;
+}
+.trash-table .files-table-header span:nth-child(4) {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+.trash-table .file-row > div:last-child {
+  justify-content: flex-end;
 }

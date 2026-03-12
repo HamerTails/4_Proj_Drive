@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fileService } from '../services/api';
 import { Icon } from '../App';
 import axios from 'axios';
+import { SkeletonFileRow, SkeletonFileCard } from './Skeleton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -79,6 +80,7 @@ export default function Dashboard({ sharedOnly = false }) {
   // modals
   const [previewFile, setPreviewFile]     = useState(null);
   const [previewText, setPreviewText]     = useState('');
+  const [detailNode,  setDetailNode]      = useState(null);
   const [shareNode, setShareNode]         = useState(null);
   const [renameNode, setRenameNode]       = useState(null);
   const [renameName, setRenameName]       = useState('');
@@ -89,7 +91,10 @@ export default function Dashboard({ sharedOnly = false }) {
   const [shareEmail, setShareEmail]       = useState('');
   const [shareStatus, setShareStatus]     = useState('');
   const [shareLoading, setShareLoading]   = useState(false);
+  const [shareExpires, setShareExpires]   = useState('');
+  const [sharePassword, setSharePassword] = useState('');
   const [sharedWithMe, setSharedWithMe]   = useState([]);
+  const [selectedIds, setSelectedIds]       = useState([]);
 
   const fileInputRef = useRef();
   const token = localStorage.getItem('token');
@@ -254,13 +259,36 @@ export default function Dashboard({ sharedOnly = false }) {
 
   const handleDelete = async (node) => {
     try { await fileService.deleteNode(node.id); loadNodes(); }
-    catch (e) { alert('Erreur : ' + (e.response?.data?.error || e.message)); }
+    catch (e) { window.__toastError?.('Erreur : ' + (e.response?.data?.error || e.message)); }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    for (const id of selectedIds) {
+      try { await fileService.deleteNode(id); } catch (e) { /* continue */ }
+    }
+    setSelectedIds([]);
+    loadNodes();
+  };
+
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === displayNodes.length) setSelectedIds([]);
+    else setSelectedIds(displayNodes.map(n => n.id));
   };
 
   const generateLink = async () => {
     setShareLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/api/shares`, { node_id: shareNode.id }, {
+      const body = { node_id: shareNode.id };
+      if (sharePassword) body.password = sharePassword;
+      if (shareExpires)  body.expires_at = shareExpires;
+      const res = await axios.post(`${API_URL}/api/shares`, body, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const t = res.data.link.split('/').pop();
@@ -381,8 +409,23 @@ export default function Dashboard({ sharedOnly = false }) {
           /* ── VUE LISTE ── */
           <div className="files-table">
             <div className="files-table-header">
-              <span>Nom</span><span>Taille</span><span>Type</span>
-              <span style={{ textAlign: 'right' }}>Date</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input type="checkbox" style={{ cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
+                  checked={displayNodes.length > 0 && selectedIds.length === displayNodes.length}
+                  ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < displayNodes.length; }}
+                  onChange={toggleSelectAll} onClick={e => e.stopPropagation()} />
+                Nom
+              </span>
+              <span>Taille</span><span>Type</span><span>Date</span>
+              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {selectedIds.length > 0 && (
+                  <button
+                    style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--danger)', background: 'transparent', cursor: 'pointer' }}
+                    onClick={handleDeleteSelected}>
+                    Supprimer ({selectedIds.length})
+                  </button>
+                )}
+              </span>
             </div>
             {displayNodes.map((node) => {
               const cat = getFileCategory(node);
@@ -406,14 +449,17 @@ export default function Dashboard({ sharedOnly = false }) {
                   onClick={() => handleNodeClick(node)}
                 >
                   <div className="file-name-cell">
+                    <input type="checkbox" style={{ cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
+                      checked={selectedIds.includes(node.id)}
+                      onChange={e => toggleSelect(node.id, e)}
+                      onClick={e => e.stopPropagation()} />
                     <FileIcon category={cat} size={28} />
                     <span className="file-name">{node.name}</span>
                   </div>
                   <span className="file-size">{node.type === 'file' ? formatSize(node.size) : '—'}</span>
-                  <span className="file-type-label">{node.mime_type || 'dossier'}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                    <span className="file-date" style={{ marginRight: 8 }}>{formatDate(node.created_at)}</span>
-                    <div className="file-actions" onClick={(e) => e.stopPropagation()}>
+                  <span className="file-type-label" title={node.mime_type || 'dossier'}>{node.mime_type ? node.mime_type.split('/').pop() : 'dossier'}</span>
+                  <span className="file-date">{formatDate(node.created_at)}</span>
+                  <div className="file-actions" onClick={(e) => e.stopPropagation()}>
                       {node.type === 'file' && (
                         <a href={fileService.downloadFile(node.id)} download title="Télécharger">
                           <button className="btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
@@ -425,7 +471,12 @@ export default function Dashboard({ sharedOnly = false }) {
                         </a>
                       )}
                       {!sharedOnly && (
-                        <button className="btn-icon" title="Partager" onClick={() => { setShareNode(node); setShareLink(''); setShareMode('public'); setShareEmail(''); setShareStatus(''); }}>
+                        <button className="btn-icon" title="Détails" onClick={() => setDetailNode(node)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        </button>
+                      )}
+                      {!sharedOnly && (
+                        <button className="btn-icon" title="Partager" onClick={() => { setShareNode(node); setShareLink(''); setShareMode('public'); setShareEmail(''); setShareStatus(''); setSharePassword(''); setShareExpires(''); }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                         </button>
                       )}
@@ -439,7 +490,6 @@ export default function Dashboard({ sharedOnly = false }) {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                         </button>
                       )}
-                    </div>
                   </div>
                 </div>
               );
@@ -556,6 +606,37 @@ export default function Dashboard({ sharedOnly = false }) {
         </div>
       )}
 
+
+      {/* ── modal détails fichier (F1-11) ── */}
+      {detailNode && (
+        <div className="modal-overlay" onClick={() => setDetailNode(null)}>
+          <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Détails — {detailNode.name}</span>
+              <button className="btn-icon" onClick={() => setDetailNode(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {[
+                { label: 'Nom',          value: detailNode.name },
+                { label: 'Type',         value: detailNode.type === 'folder' ? 'Dossier' : (detailNode.mime_type || '—') },
+                { label: 'Taille',       value: detailNode.size ? (detailNode.size < 1024**2 ? (detailNode.size/1024).toFixed(1)+' Ko' : (detailNode.size/1024**2).toFixed(1)+' Mo') : '—' },
+                { label: 'Créé le',      value: detailNode.created_at ? new Date(detailNode.created_at).toLocaleString('fr-FR') : '—' },
+                { label: 'Modifié le',   value: detailNode.updated_at ? new Date(detailNode.updated_at).toLocaleString('fr-FR') : '—' },
+                { label: 'Identifiant',  value: '#' + detailNode.id },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>{label}</span>
+                  <span style={{ color: 'var(--text-primary)', maxWidth: '60%', textAlign: 'right', wordBreak: 'break-all' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDetailNode(null)}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* modal partage */}
       {shareNode && (
         <div className="modal-overlay" onClick={() => setShareNode(null)}>
@@ -569,6 +650,16 @@ export default function Dashboard({ sharedOnly = false }) {
               {shareMode === 'public' ? (
                 <div>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Générez un lien accessible sans compte.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Mot de passe (optionnel)</label>
+                      <input className="form-input" type="password" placeholder="Laisser vide pour aucun" value={sharePassword} onChange={e => setSharePassword(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Expiration (optionnel)</label>
+                      <input className="form-input" type="datetime-local" value={shareExpires} onChange={e => setShareExpires(e.target.value)} style={{ colorScheme: 'dark light' }} />
+                    </div>
+                  </div>
                   {shareLoading ? <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>Génération…</div>
                   : shareLink ? (
                     <div>

@@ -59,6 +59,7 @@ const filesRouter   = require("./routes/files");
 const trashRouter   = require("./routes/trash");
 const storageRouter = require("./routes/storage");
 const sharesRouter  = require("./routes/shares");
+const usersRouter   = require("./routes/users");
 
 app.use("/api/auth",    authLimiter, authRouter);
 app.use("/api/nodes",   nodesRouter);
@@ -66,6 +67,7 @@ app.use("/api/files",   filesRouter);
 app.use("/api/trash",   trashRouter);
 app.use("/api/storage", storageRouter);
 app.use("/api/shares",  sharesRouter);
+app.use("/api/users",   usersRouter);
 
 // Alias compatibilité frontend
 app.use("/api/internal-shares", (req, res, next) => {

@@ -7,6 +7,39 @@ const formatSize = (bytes) => {
   if (!bytes) return '—';
   if (bytes < 1024) return bytes + ' o';
   if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' Ko';
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === items.length) setSelectedIds([]);
+    else setSelectedIds(items.map(n => n.id));
+  };
+
+  const restoreSelected = async () => {
+    for (const id of selectedIds) {
+      try { await axios.put(`${API_URL}/api/trash/${id}/restore`, {}, { headers }); } catch {}
+    }
+    setSelectedIds([]);
+    load();
+  };
+
+  const deleteSelected = () => {
+    confirm(
+      'Supprimer définitivement',
+      `${selectedIds.length} élément(s) seront supprimés définitivement. Cette action est irréversible.`,
+      async () => {
+        for (const id of selectedIds) {
+          try { await axios.delete(`${API_URL}/api/trash/${id}/permanent`, { headers }); } catch {}
+        }
+        setSelectedIds([]);
+        load();
+      }
+    );
+  };
+
   return (bytes / 1024 ** 2).toFixed(1) + ' Mo';
 };
 
@@ -18,6 +51,39 @@ const formatDate = (iso) => {
 // modal de confirmation/info réutilisable — plus de confirm() ni alert() natifs
 function Dialog({ title, message, type = 'confirm', onConfirm, onClose }) {
   const isConfirm = type === 'confirm';
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === items.length) setSelectedIds([]);
+    else setSelectedIds(items.map(n => n.id));
+  };
+
+  const restoreSelected = async () => {
+    for (const id of selectedIds) {
+      try { await axios.put(`${API_URL}/api/trash/${id}/restore`, {}, { headers }); } catch {}
+    }
+    setSelectedIds([]);
+    load();
+  };
+
+  const deleteSelected = () => {
+    confirm(
+      'Supprimer définitivement',
+      `${selectedIds.length} élément(s) seront supprimés définitivement. Cette action est irréversible.`,
+      async () => {
+        for (const id of selectedIds) {
+          try { await axios.delete(`${API_URL}/api/trash/${id}/permanent`, { headers }); } catch {}
+        }
+        setSelectedIds([]);
+        load();
+      }
+    );
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
@@ -47,6 +113,7 @@ export default function Trash() {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog]   = useState(null); // { title, message, type, onConfirm }
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const token  = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -117,6 +184,39 @@ export default function Trash() {
     );
   };
 
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === items.length) setSelectedIds([]);
+    else setSelectedIds(items.map(n => n.id));
+  };
+
+  const restoreSelected = async () => {
+    for (const id of selectedIds) {
+      try { await axios.put(`${API_URL}/api/trash/${id}/restore`, {}, { headers }); } catch {}
+    }
+    setSelectedIds([]);
+    load();
+  };
+
+  const deleteSelected = () => {
+    confirm(
+      'Supprimer définitivement',
+      `${selectedIds.length} élément(s) seront supprimés définitivement. Cette action est irréversible.`,
+      async () => {
+        for (const id of selectedIds) {
+          try { await axios.delete(`${API_URL}/api/trash/${id}/permanent`, { headers }); } catch {}
+        }
+        setSelectedIds([]);
+        load();
+      }
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -167,16 +267,39 @@ export default function Trash() {
               </span>
             </div>
 
-            <div className="files-table">
+            <div className="files-table trash-table">
               <div className="files-table-header">
-                <span>Nom</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" style={{ cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
+                    checked={items.length > 0 && selectedIds.length === items.length}
+                    ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < items.length; }}
+                    onChange={toggleSelectAll} onClick={e => e.stopPropagation()} />
+                  Nom
+                </span>
                 <span>Taille</span>
                 <span>Supprimé le</span>
-                <span>Actions</span>
+                <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                  {selectedIds.length > 0 ? (
+                    <>
+                      <button className="btn btn-secondary" style={{ height: 28, fontSize: 12 }}
+                        onClick={restoreSelected}>
+                        ↩ Restaurer ({selectedIds.length})
+                      </button>
+                      <button className="btn btn-danger" style={{ height: 28, fontSize: 12 }}
+                        onClick={deleteSelected}>
+                        Supprimer ({selectedIds.length})
+                      </button>
+                    </>
+                  ) : <span>Actions</span>}
+                </span>
               </div>
               {items.map((item) => (
                 <div key={item.id} className="file-row" style={{ cursor: 'default' }}>
                   <div className="file-name-cell">
+                    <input type="checkbox" style={{ cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
+                      checked={selectedIds.includes(item.id)}
+                      onChange={e => toggleSelect(item.id, e)}
+                      onClick={e => e.stopPropagation()} />
                     <div className={`file-icon-wrap ${item.type === 'folder' ? 'folder' : 'other'}`}>
                       {item.type === 'folder' ? '📁' : '📄'}
                     </div>
