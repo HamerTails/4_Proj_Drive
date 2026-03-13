@@ -1,6 +1,6 @@
 # API – SUPFILE
 
-L’API constitue le cœur de la plateforme SUPFILE.
+L’API constitue le coeur de la plateforme SUPFILE.
 Elle gère l’authentification, la gestion des fichiers et des dossiers,
 ainsi que les fonctionnalités de partage.
 

@@ -5,11 +5,7 @@ const path = require("path");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
-/**
- * B1-10 : Vérification intégrité fichiers physiques
- * Vérifie que tous les storage_path en BDD existent sur le disque.
- * Peut être appelé au démarrage ou via GET /api/admin/integrity
- */
+
 const checkIntegrity = async () => {
     console.log("[INTEGRITY] Démarrage de la vérification...");
 
@@ -31,10 +27,10 @@ const checkIntegrity = async () => {
     }
 
     if (missing.length === 0) {
-        console.log(`[INTEGRITY] ✅ Tous les fichiers sont OK (${ok.length} vérifiés)`);
+        console.log('[INTEGRITY] ✅ Tous les fichiers sont OK (${ok.length} vérifiés)');
     } else {
-        console.warn(`[INTEGRITY] ⚠️  ${missing.length} fichier(s) manquant(s) sur le disque :`);
-        missing.forEach(f => console.warn(`  - [id=${f.id}] ${f.name} → ${f.storage_path}`));
+        console.warn('[INTEGRITY] ⚠️  ${missing.length} fichier(s) manquant(s) sur le disque :');
+        missing.forEach(f => console.warn('  - [id=${f.id}] ${f.name} → ${f.storage_path}'));
     }
 
     return { total: result.rows.length, ok: ok.length, missing };

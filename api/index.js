@@ -1,28 +1,22 @@
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
+const cors    = require("cors");
+const helmet  = require("helmet");
 const rateLimit = require("express-rate-limit");
-
 const app = express();
 
-// -----------------------------------------------------------------------
-// SÉCURITÉ & MIDDLEWARES GLOBAUX
-// -----------------------------------------------------------------------
 
-// Helmet avec CSP assouplie pour autoriser les médias cross-origin
+// Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      // Autoriser les médias (audio/vidéo) depuis l'API
+
       "media-src": ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
-      // Autoriser les images et iframes (preview PDF)
       "img-src":   ["'self'", "data:", "http://localhost:3000", process.env.API_URL].filter(Boolean),
       "frame-src": ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
     },
   },
-  // Désactiver CORP pour permettre le chargement cross-origin des médias
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
@@ -34,7 +28,7 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS bloqué pour : ${origin}`));
+    callback(new Error('CORS bloqué pour : ' + origin));
   },
   credentials: true,
 }));
@@ -69,7 +63,6 @@ app.use("/api/storage", storageRouter);
 app.use("/api/shares",  sharesRouter);
 app.use("/api/users",   usersRouter);
 
-// Alias compatibilité frontend
 app.use("/api/internal-shares", (req, res, next) => {
   req.url = "/internal" + (req.url === "/" ? "" : req.url);
   sharesRouter(req, res, next);
@@ -79,25 +72,20 @@ function safeMount(app, path, modulePath) {
   try {
     const router = require(modulePath);
     app.use(path, router);
-    console.log(`✅ Route montée : ${path}`);
+    console.log('✅ Route montée : ' + path);
   } catch {
-    console.warn(`⚠️  Route ignorée (fichier absent) : ${modulePath}`);
+    console.warn('⚠️  Route ignorée (fichier absent) : ' + modulePath);
   }
 }
 
 safeMount(app, "/api/search",   "./routes/search");
 safeMount(app, "/api/settings", "./routes/settings");
 
-// -----------------------------------------------------------------------
-// HEALTHCHECK
-// -----------------------------------------------------------------------
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// -----------------------------------------------------------------------
-// B1-10 : Intégrité fichiers
-// -----------------------------------------------------------------------
+
 app.get("/api/admin/integrity", async (req, res) => {
   try {
     const checkIntegrity = require("./utils/integrity");
@@ -108,9 +96,7 @@ app.get("/api/admin/integrity", async (req, res) => {
   }
 });
 
-// -----------------------------------------------------------------------
-// GESTION D'ERREURS GLOBALE
-// -----------------------------------------------------------------------
+
 app.use((err, req, res, next) => {
   console.error("[ERROR]", err.message);
   if (err.code === "LIMIT_FILE_SIZE") {
@@ -124,18 +110,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-// -----------------------------------------------------------------------
-// DÉMARRAGE
-// -----------------------------------------------------------------------
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
-  console.log(`✅ API SUPFile démarrée sur le port ${PORT}`);
+  console.log('✅ API SUPFile démarrée sur le port ' + PORT);
   try {
     const checkIntegrity = require("./utils/integrity");
     checkIntegrity().catch(err => console.warn("[INTEGRITY] Erreur:", err.message));
-  } catch {
-    // utils/integrity.js absent, on ignore
-  }
+  } catch {}
 });
 
 module.exports = app;

@@ -9,24 +9,22 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization = 'Bearer ' + token;
   }
   return config;
 });
 
-// ── Intercepteur réponse global (F1-19) ─────────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // token expiré ou invalide → déconnexion
+      // token expiré ou invalide => déconnexion
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
       return Promise.reject(error);
     }
     if (!error.response) {
-      // erreur réseau
       window.__toastError?.('Erreur réseau — vérifiez votre connexion.');
     }
     return Promise.reject(error);
@@ -70,13 +68,12 @@ export const fileService = {
     return response.data.nodes;
   },
 
-  // Breadcrumb — endpoint correct
   getPath: async (nodeId) => {
     const response = await api.get('/nodes/breadcrumb', { params: { id: nodeId } });
     return response.data.path;
   },
 
-  // Création dossier — endpoint correct
+  // Création dossier : endpoint correct
   createFolder: async (name, parentId = null) => {
     const response = await api.post('/nodes/folder', { name, parent_id: parentId });
     return response.data;
@@ -98,39 +95,39 @@ export const fileService = {
     return response.data;
   },
 
-  // Renommage — endpoint correct avec /rename
+  // Renommage : endpoint correct avec /rename
   renameNode: async (nodeId, name) => {
-    const response = await api.put(`/nodes/${nodeId}/rename`, { name });
+    const response = await api.put('/nodes/' + nodeId + '/rename', { name });
     return response.data.node;
   },
 
   moveNode: async (nodeId, parentId) => {
-    const response = await api.put(`/nodes/${nodeId}/move`, { parent_id: parentId });
+    const response = await api.put('/nodes/' + nodeId + '/move', { parent_id: parentId });
     return response.data.node;
   },
 
   deleteNode: async (nodeId) => {
-    await api.delete(`/nodes/${nodeId}`);
+    await api.delete('/nodes/' + nodeId);
   },
 
   downloadFile: (nodeId) => {
     const token = localStorage.getItem('token');
-    return `${API_URL}/files/${nodeId}/download?token=${token}`;
+    return API_URL + '/files/' + nodeId + '/download?token=' + token;
   },
 
   previewUrl: (nodeId) => {
     const token = localStorage.getItem('token');
-    return `${API_URL}/files/${nodeId}/preview?token=${token}`;
+    return API_URL + '/files/' + nodeId + '/preview?token=' + token;
   },
 
   streamUrl: (nodeId) => {
     const token = localStorage.getItem('token');
-    return `${API_URL}/files/${nodeId}/stream?token=${token}`;
+    return API_URL + '/files/' + nodeId + '/stream?token=' + token;
   },
 
   downloadFolderUrl: (folderId) => {
     const token = localStorage.getItem('token');
-    return `${API_URL}/files/folder/${folderId}/download?token=${token}`;
+    return API_URL + '/files/folder/' + folderId + '/download?token=' + token;
   }
 };
 

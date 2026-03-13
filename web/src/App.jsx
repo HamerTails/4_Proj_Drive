@@ -46,7 +46,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    axios.get(`${API_URL}/api/storage/usage`, { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(API_URL + '/api/storage/usage', { headers: { Authorization: 'Bearer ' + token } })
       .then(r => setQuota(r.data))
       .catch(() => {});
   }, []);
@@ -99,28 +99,28 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
           <div className="sidebar-section-label">Navigation</div>
 
           <button
-            className={`sidebar-item ${activeView === 'dashboard' ? 'active' : ''}`}
+            className={'sidebar-item' + (activeView === 'dashboard' ? ' active' : '')}
             onClick={() => onNavigate('dashboard')}
           >
             <Icon name="dashboard" size={15} /> Tableau de bord
           </button>
 
           <button
-            className={`sidebar-item ${activeView === 'files' ? 'active' : ''}`}
+            className={'sidebar-item' + (activeView === 'files' ? ' active' : '')}
             onClick={() => onNavigate('files')}
           >
             <Icon name="files" size={15} /> Mes fichiers
           </button>
 
           <button
-            className={`sidebar-item ${activeView === 'shared' ? 'active' : ''}`}
+            className={'sidebar-item' + (activeView === 'shared' ? ' active' : '')}
             onClick={() => onNavigate('shared')}
           >
             <Icon name="shared" size={15} /> Partagés avec moi
           </button>
 
           <button
-            className={`sidebar-item ${activeView === 'trash' ? 'active' : ''}`}
+            className={'sidebar-item' + (activeView === 'trash' ? ' active' : '')}
             onClick={() => onNavigate('trash')}
           >
             <Icon name="trash" size={15} /> Corbeille
@@ -130,7 +130,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
         <div className="sidebar-section">
           <div className="sidebar-section-label">Compte</div>
           <button
-            className={`sidebar-item ${activeView === 'settings' ? 'active' : ''}`}
+            className={'sidebar-item' + (activeView === 'settings' ? ' active' : '')}
             onClick={() => onNavigate('settings')}
           >
             <Icon name="settings" size={15} /> Paramètres
@@ -151,7 +151,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
                   <span>30 Go</span>
                 </div>
                 <div style={{ height: 5, background: 'var(--bg-tertiary)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 800ms ease' }} />
+                  <div style={{ height: '100%', width: pct + '%', background: color, borderRadius: 99, transition: 'width 800ms ease' }} />
                 </div>
                 <div style={{ fontSize: 11, color: pct > 90 ? 'var(--danger)' : 'var(--text-tertiary)', marginTop: 4 }}>
                   {pct.toFixed(1)}% — {fmt(QUOTA_MAX - used)} disponible

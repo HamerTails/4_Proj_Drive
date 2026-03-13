@@ -4,7 +4,7 @@ const authenticateToken = (req, res, next) => {
   let token = null;
   const authHeader = req.headers["authorization"];
 
-  // 1. Recupération du token (Header ou Query Param)
+  // Recupération du token
   if (authHeader && authHeader.startsWith("Bearer ")) {
     token = authHeader.split(" ")[1];
   } else if (req.query.token) {

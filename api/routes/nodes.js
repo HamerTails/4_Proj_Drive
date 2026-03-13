@@ -8,19 +8,13 @@ const authenticateToken = require("../middleware/auth");
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
-/**
- * GET /api/nodes
- * Liste les nodes d'un dossier (exclut la corbeille)
- */
+// Liste les nodes d'un dossier (exclut la corbeille)
+
 router.get("/", authenticateToken, async (req, res) => {
     const parentId = req.query.parent_id || null;
     try {
         const result = await pool.query(
-            `SELECT * FROM nodes 
-             WHERE user_id = $1 
-             AND parent_id IS NOT DISTINCT FROM $2 
-             AND is_trashed = FALSE 
-             ORDER BY type DESC, name ASC`,
+            'SELECT * FROM nodes WHERE user_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND is_trashed = FALSE ORDER BY type DESC, name ASC',
             [req.user.id, parentId]
         );
         res.json({ nodes: result.rows });
@@ -30,24 +24,19 @@ router.get("/", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * GET /api/nodes/breadcrumb?id=xxx
- * Retourne le chemin complet vers un dossier
- */
+// Retourne le chemin complet vers un dossier
 router.get("/breadcrumb", authenticateToken, async (req, res) => {
     const { id } = req.query;
     if (!id) return res.json({ path: [] });
 
     try {
         const result = await pool.query(
-            `WITH RECURSIVE parents AS (
-                SELECT id, name, parent_id FROM nodes WHERE id = $1 AND user_id = $2
-                UNION
-                SELECT n.id, n.name, n.parent_id FROM nodes n
-                INNER JOIN parents p ON p.parent_id = n.id
-                WHERE n.user_id = $2
-            )
-            SELECT id, name FROM parents ORDER BY id ASC`,
+            'WITH RECURSIVE parents AS (' +
+                'SELECT id, name, parent_id FROM nodes WHERE id = $1 AND user_id = $2 ' +
+                'UNION ' +
+                'SELECT n.id, n.name, n.parent_id FROM nodes n ' +
+                'INNER JOIN parents p ON p.parent_id = n.id WHERE n.user_id = $2' +
+            ') SELECT id, name FROM parents ORDER BY id ASC',
             [id, req.user.id]
         );
         res.json({ path: result.rows });
@@ -57,20 +46,18 @@ router.get("/breadcrumb", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * GET /api/nodes/:id/details
- * Détails techniques d'un node (B1-8)
- */
+// Détails techniques d'un node
+
 router.get("/:id/details", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query(
-            "SELECT * FROM nodes WHERE id = $1 AND user_id = $2",
+            'SELECT * FROM nodes WHERE id = $1 AND user_id = $2',
             [id, req.user.id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: "Node non trouvé" });
-        
+
         const node = result.rows[0];
         let stats = {};
 
@@ -92,18 +79,15 @@ router.get("/:id/details", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * POST /api/nodes/folder
- * Créer un nouveau dossier
- */
+//Créer un nouveau dossier
+
 router.post("/folder", authenticateToken, async (req, res) => {
     try {
         const { name, parent_id } = req.body;
         if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
 
         const result = await pool.query(
-            `INSERT INTO nodes (user_id, parent_id, type, name)
-             VALUES ($1, $2, 'folder', $3) RETURNING *`,
+            "INSERT INTO nodes (user_id, parent_id, type, name) VALUES ($1, $2, 'folder', $3) RETURNING *",
             [req.user.id, parent_id || null, name.trim()]
         );
         res.status(201).json(result.rows[0]);
@@ -113,10 +97,8 @@ router.post("/folder", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * PUT /api/nodes/:id/rename
- * Renommer un node
- */
+// Renommer un node
+
 router.put("/:id/rename", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -124,9 +106,7 @@ router.put("/:id/rename", authenticateToken, async (req, res) => {
         if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
 
         const result = await pool.query(
-            `UPDATE nodes SET name = $1
-             WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE
-             RETURNING *`,
+            'UPDATE nodes SET name = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE RETURNING *',
             [name.trim(), id, req.user.id]
         );
 
@@ -138,24 +118,19 @@ router.put("/:id/rename", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * PUT /api/nodes/:id/move
- * Déplacer un node dans un autre dossier
- */
+// Déplacer un node dans un autre dossier
 router.put("/:id/move", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { parent_id } = req.body;
 
-        // Protection anti-boucle : vérifier que la destination n'est pas un enfant du node
         if (parent_id) {
             const loopCheck = await pool.query(
-                `WITH RECURSIVE children AS (
-                    SELECT id FROM nodes WHERE id = $1
-                    UNION
-                    SELECT n.id FROM nodes n INNER JOIN children c ON c.id = n.parent_id
-                )
-                SELECT id FROM children WHERE id = $2`,
+                'WITH RECURSIVE children AS (' +
+                    'SELECT id FROM nodes WHERE id = $1 ' +
+                    'UNION ' +
+                    'SELECT n.id FROM nodes n INNER JOIN children c ON c.id = n.parent_id' +
+                ') SELECT id FROM children WHERE id = $2',
                 [id, parent_id]
             );
             if (loopCheck.rows.length > 0) {
@@ -164,9 +139,7 @@ router.put("/:id/move", authenticateToken, async (req, res) => {
         }
 
         const result = await pool.query(
-            `UPDATE nodes SET parent_id = $1
-             WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE
-             RETURNING *`,
+            'UPDATE nodes SET parent_id = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE RETURNING *',
             [parent_id || null, id, req.user.id]
         );
 
@@ -178,17 +151,12 @@ router.put("/:id/move", authenticateToken, async (req, res) => {
     }
 });
 
-/**
- * DELETE /api/nodes/:id
- * Soft delete — déplace vers la corbeille (B1-1)
- */
+// DELETE /api/nodes/:id
 router.delete("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query(
-            `UPDATE nodes SET is_trashed = TRUE, trashed_at = NOW()
-             WHERE id = $1 AND user_id = $2
-             RETURNING *`,
+            'UPDATE nodes SET is_trashed = TRUE, trashed_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *',
             [id, req.user.id]
         );
 
@@ -200,9 +168,8 @@ router.delete("/:id", authenticateToken, async (req, res) => {
     }
 });
 
-// -----------------------------------------------------------------------
-// CRON : nettoyage automatique corbeille (30 jours)
-// -----------------------------------------------------------------------
+// nettoyage automatique corbeille (30 jours)
+
 const deleteExpiredTrash = async () => {
     try {
         const result = await pool.query(
@@ -214,12 +181,12 @@ const deleteExpiredTrash = async () => {
             if (node.type === "file" && node.storage_path) {
                 const filePath = path.join(STORAGE_PATH, node.storage_path);
                 await fs.unlink(filePath).catch(() => {
-                    console.warn(`[CRON] Fichier physique absent: ${node.storage_path}`);
+                    console.warn("[CRON] Fichier physique absent: " + node.storage_path);
                 });
             }
             await pool.query("DELETE FROM nodes WHERE id = $1", [node.id]);
         }
-        console.log(`[CRON] Corbeille nettoyée : ${result.rows.length} élément(s) supprimé(s)`);
+        console.log("[CRON] Corbeille nettoyée : " + result.rows.length + " élément(s) supprimé(s)");
     } catch (err) {
         console.error("[CRON] Erreur nettoyage corbeille:", err);
     }
