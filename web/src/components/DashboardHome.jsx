@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+
+
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const QUOTA_MAX_BYTES = 30 * 1024 ** 3;
@@ -141,7 +146,18 @@ const Card = ({ children, style }) => (
     borderRadius: 'var(--radius-lg)',
     padding:      '20px 24px',
     boxShadow:    'var(--shadow-sm)',
+    transition: 'all 0.3s ease',
     ...style,
+
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.transform = 'translateY(-2px)';
+    e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+  
   }}>
     {children}
   </div>
@@ -215,14 +231,38 @@ export default function DashboardHome({ onNavigateFiles }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="topbar">
-        <span className="topbar-title">Tableau de bord</span>
+        <span 
+        className="topbar-title"
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          letterSpacing: '0.3px',
+        }}
+        >
+          📊 Tableau de bord
+        </span>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={onNavigateFiles}>
+          <button
+            className="btn btn-primary"
+            onClick={onNavigateFiles}
+            style={{
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 14px rgba(37, 99, 235, 0.25)';
+           }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.2)';
+           }}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
             </svg>
             Mes fichiers
-          </button>
+        </button>
         </div>
       </div>
 
@@ -248,18 +288,19 @@ export default function DashboardHome({ onNavigateFiles }) {
               </div>
 
               <div style={{
-                height:       8,
+                height:       10,
                 background:   'var(--bg-tertiary)',
-                borderRadius: 99,
+                borderRadius: 999,
                 overflow:     'hidden',
-                marginBottom: 6,
+                marginBottom: 8,
               }}>
                 <div style={{
                   height:       '100%',
                   width:        '${pct}%',
                   background:   gauge,
-                  borderRadius: 99,
-                  transition:   'width 900ms ease',
+                  borderRadius: 999,
+                  transition:   'width 0.8s ease',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
                 }} />
               </div>
 
@@ -295,7 +336,7 @@ export default function DashboardHome({ onNavigateFiles }) {
               <SectionLabel>Répartition par type</SectionLabel>
               {breakdown.length === 0 ? (
                 <div style={{ color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
-                  Aucune donnée
+                   Aucun fichier pour le moment — ajoutez des fichiers pour voir la répartition
                 </div>
               ) : (
                 <CamembertChart data={breakdown} />
@@ -304,9 +345,20 @@ export default function DashboardHome({ onNavigateFiles }) {
 
             {/* Fichiers récents */}
             <Card style={{ gridColumn: '1 / -1' }}>
-              <SectionLabel>Fichiers récents</SectionLabel>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontSize: 16 }}>🕘</span>
+                  <SectionLabel>Fichiers récents</SectionLabel>
+              </div>
               {recent.length === 0 ? (
-                <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>Aucun fichier récent</div>
+                <div style={{ 
+                  textAlign: 'center', 
+                  color: 'var(--text-tertiary)', 
+                  fontSize: 13,
+                  paddingTop: 20
+              }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>📂</div>
+                Aucun fichier récent — vos derniers fichiers apparaîtront ici
+                </div>
               ) : (
                 recent.map((file) => (
                   <div
@@ -321,9 +373,15 @@ export default function DashboardHome({ onNavigateFiles }) {
                       cursor:     'pointer',
                       transition: 'background 120ms',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
+                    onMouseEnter={(e) => { 
+                      e.currentTarget.style.background = 'var(--bg-secondary)';
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                    }}  
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  > 
                     <img
                       src={mimeToIcon(file.mime_type)}
                       width={26}
