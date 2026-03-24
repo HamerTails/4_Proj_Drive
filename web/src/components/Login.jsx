@@ -15,9 +15,15 @@ export default function Login({ onLogin }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token  = params.get('token');
+    const error  = params.get('error');
+
+    // Nettoyer l'URL immédiatement pour éviter la reconnexion au rechargement
+    if (token || error) {
+      window.history.replaceState({}, '', '/login');
+    }
+
     if (token) {
       localStorage.setItem('token', token);
-      // Décoder le token pour récupérer les infos utilisateur (dont provider)
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         localStorage.setItem('user', JSON.stringify({
@@ -27,6 +33,10 @@ export default function Login({ onLogin }) {
         }));
       } catch {}
       onLogin();
+    }
+
+    if (error) {
+      setError('Connexion Google échouée, réessayez.');
     }
   }, [onLogin]);
 
@@ -115,7 +125,7 @@ export default function Login({ onLogin }) {
           type="button"
           style={{ ...styles.btn, ...styles.btnGoogle }}
           onClick={() => {
-            window.location.href = API_URL + "/api/auth/google";
+            window.location.href = `${API_URL}/api/auth/google`;
           }}
           disabled={loading}
         >

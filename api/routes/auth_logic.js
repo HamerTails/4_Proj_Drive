@@ -18,7 +18,7 @@ function configureGoogleStrategy() {
 
     const callbackURL =
         process.env.OAUTH_CALLBACK_URL ||
-        `${process.env.API_URL || "http://localhost:3000"}/api/auth/google/callback`;
+        (process.env.API_URL || "http://localhost:3000") + "/api/auth/google/callback";
 
     passport.use(
         new GoogleStrategy(
@@ -153,8 +153,9 @@ router.get("/google", (req, res, next) => {
         return res.status(500).json({ error: "Google OAuth non configuré sur le serveur" });
     }
     return passport.authenticate("google", {
-        scope: ["profile", "email"],
+        scope:   ["profile", "email"],
         session: false,
+        prompt:  "select_account",
     })(req, res, next);
 });
 
@@ -163,7 +164,7 @@ router.get("/google/callback", (req, res, next) => {
         const webUrl = process.env.WEB_URL || "http://localhost:3001";
 
         if (err || !user) {
-            return res.redirect(`${webUrl}/login?error=oauth_failed`);
+            return res.redirect(webUrl + "/login?error=oauth_failed");
         }
 
         const token = jwt.sign(
@@ -172,7 +173,7 @@ router.get("/google/callback", (req, res, next) => {
             { expiresIn: "7d" }
         );
 
-        return res.redirect(`${webUrl}/login?token=${encodeURIComponent(token)}`);
+        return res.redirect(webUrl + "/login?token=" + encodeURIComponent(token));
     })(req, res, next);
 });
 
