@@ -57,71 +57,42 @@ const mimeToIcon = (m) => {
 
 // graphique camembert
 function CamembertChart({ data }) {
-  const size = 180;
-  const cx   = size / 2;
-  const cy   = size / 2;
-  const R    = 70;
-  const r    = 45;
-
-  const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return null;
-
-  let angle = -Math.PI / 2;
-  const slices = data.map((d) => {
-    const sweep = (d.value / total) * 2 * Math.PI;
-    const start = angle;
-    angle += sweep;
-    return { ...d, start, sweep };
-  });
-
-  const arc = (cx, cy, R, start, sweep) => {
-    const x1    = cx + R * Math.cos(start);
-    const y1    = cy + R * Math.sin(start);
-    const x2    = cx + R * Math.cos(start + sweep);
-    const y2    = cy + R * Math.sin(start + sweep);
-    const large = sweep > Math.PI ? 1 : 0;
-    return 'M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}';
-  };
-
-  const [hovered, setHovered] = useState(null);
+  const chartData = (data || []).filter((d) => Number(d.value) > 0);
+  if (chartData.length === 0) return null;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-      <svg width={size} height={size} style={{ flexShrink: 0 }}>
-        {slices.map((s, i) => {
-          const outerR = hovered === i ? R + 6 : R;
-          const d =
-            arc(cx, cy, outerR, s.start, s.sweep - 0.02) +
-            ' ' +
-            arc(cx, cy, r, s.start + s.sweep - 0.02, -(s.sweep - 0.02)) +
-            ' Z';
-
-          return (
-            <path
-              key={s.name}
-              d={d}
-              fill={COLORS[s.name] || '#D1D5DB'}
-              style={{ cursor: 'pointer', transition: 'all 150ms' }}
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', minHeight: 200 }}>
+      <div style={{ width: 180, height: 180, flexShrink: 0, display: 'flex' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={chartData}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={70}
+              paddingAngle={1}
+              stroke="none"
+            >
+              {chartData.map((entry) => (
+                <Cell key={entry.name} fill={COLORS[entry.name] || '#D1D5DB'} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value) => fmt(Number(value))}
+              contentStyle={{
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-primary)',
+              }}
             />
-          );
-        })}
-
-        {hovered !== null && (
-          <text x={cx} y={cy - 8} textAnchor="middle" fontSize={11} fill="var(--text-tertiary)">
-            {slices[hovered].name}
-          </text>
-        )}
-        {hovered !== null && (
-          <text x={cx} y={cy + 10} textAnchor="middle" fontSize={13} fontWeight="600" fill="var(--text-primary)">
-            {fmt(slices[hovered].value)}
-          </text>
-        )}
-      </svg>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {slices.map((s) => (
+        {chartData.map((s) => (
           <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--text-secondary)' }}>
             <div style={{
               width:        10,
@@ -183,7 +154,7 @@ export default function DashboardHome({ onNavigateFiles }) {
   const [loading,   setLoading]   = useState(true);
 
   const token   = localStorage.getItem('token');
-  const headers = { Authorization: 'Bearer ${token}' };
+  const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => {
     load();
@@ -193,9 +164,9 @@ export default function DashboardHome({ onNavigateFiles }) {
     setLoading(true);
 
     const [u, r, b] = await Promise.allSettled([
-      axios.get('${API_URL}/api/storage/usage',          { headers }),
-      axios.get('${API_URL}/api/storage/recent?limit=5', { headers }),
-      axios.get('${API_URL}/api/storage/breakdown',       { headers }),
+      axios.get(`${API_URL}/api/storage/usage`, { headers }),
+      axios.get(`${API_URL}/api/storage/recent?limit=5`, { headers }),
+      axios.get(`${API_URL}/api/storage/breakdown`, { headers }),
     ]);
 
     if (u.status === 'fulfilled') setUsage(u.value.data);
@@ -205,9 +176,10 @@ export default function DashboardHome({ onNavigateFiles }) {
       const raw     = b.value.data.breakdown || [];
       const grouped = {};
 
-      for (const { mime_type, total_size } of raw) {
-        const cat = mimeToCategory(mime_type);
-        grouped[cat] = (grouped[cat] || 0) + Number(total_size);
+      for (const row of raw) {
+        const category = row.category || mimeToCategory(row.mime_type);
+        const size = Number(row.total_size || 0);
+        grouped[category] = (grouped[category] || 0) + size;
       }
 
       setBreakdown(
@@ -296,7 +268,7 @@ export default function DashboardHome({ onNavigateFiles }) {
               }}>
                 <div style={{
                   height:       '100%',
-                  width:        '${pct}%',
+                  width:        `${pct}%`,
                   background:   gauge,
                   borderRadius: 999,
                   transition:   'width 0.8s ease',

@@ -3,6 +3,7 @@ const express = require("express");
 const cors    = require("cors");
 const helmet  = require("helmet");
 const rateLimit = require("express-rate-limit");
+const passport = require("passport");
 const app = express();
 
 
@@ -35,6 +36,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,

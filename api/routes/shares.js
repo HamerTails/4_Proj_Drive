@@ -3,14 +3,17 @@ const router    = express.Router();
 const { Pool }  = require("pg");
 const { v4: uuidv4 } = require("uuid");
 const bcrypt    = require("bcrypt");
+const path      = require("path");
+const fs        = require("fs");
 const pool      = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
 
+const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
 //créer un lien public
 router.post("/", authenticateToken, async (req, res) => {
     try {
-        const { node_id, expires_at } = req.body;
+        const { node_id, expires_at, password } = req.body;
         if (!node_id) return res.status(400).json({ error: "node_id requis" });
 
         const nodeCheck = await pool.query(
@@ -21,10 +24,14 @@ router.post("/", authenticateToken, async (req, res) => {
             return res.status(404).json({ error: "Node introuvable" });
 
         const token = uuidv4();
+        let passwordHash = null;
+        if (password) {
+            passwordHash = await bcrypt.hash(password, 10);
+        }
 
         const result = await pool.query(
-            "INSERT INTO shares (node_id, token, expires_at) VALUES ($1, $2, $3) RETURNING *",
-            [node_id, token, expires_at || null]
+            "INSERT INTO shares (node_id, token, expires_at, password_hash) VALUES ($1, $2, $3, $4) RETURNING *",
+            [node_id, token, expires_at || null, passwordHash]
         );
 
         const webUrl = process.env.WEB_URL || "http://localhost:3001";
@@ -38,11 +45,11 @@ router.post("/", authenticateToken, async (req, res) => {
     }
 });
 
-// Accéder à un fichier partagé
+// Accéder à un partage public
 router.get("/public/:token", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT s.*, n.name, n.mime_type, n.storage_path, n.type, n.size " +
+            "SELECT s.*, n.user_id, n.name, n.mime_type, n.storage_path, n.type, n.size " +
             "FROM shares s " +
             "JOIN nodes n ON n.id = s.node_id " +
             "WHERE s.token = $1",
@@ -57,13 +64,92 @@ router.get("/public/:token", async (req, res) => {
         if (share.expires_at && new Date(share.expires_at) < new Date())
             return res.status(410).json({ error: "Ce lien de partage a expiré" });
 
-        res.json({
-            name:      share.name,
-            mime_type: share.mime_type,
-            type:      share.type,
-            size:      share.size,
-            node_id:   share.node_id,
-            token:     share.token,
+        // Vérifier le mot de passe si le partage en a un
+        if (share.password_hash) {
+            const providedPassword = req.query.password || req.headers['x-share-password'] || '';
+            const passwordMatch = await bcrypt.compare(providedPassword, share.password_hash);
+            if (!passwordMatch) {
+                return res.status(403).json({ error: "Mot de passe incorrect" });
+            }
+        }
+
+        const requestedFileId = req.query.file ? parseInt(req.query.file, 10) : null;
+
+        // Téléchargement/affichage d'un fichier public
+        if (requestedFileId) {
+            let allowed = false;
+
+            if (requestedFileId === share.node_id) {
+                allowed = true;
+            } else if (share.type === "folder") {
+                const descendant = await pool.query(
+                    "WITH RECURSIVE tree AS (" +
+                    "  SELECT id, parent_id FROM nodes WHERE id = $1 " +
+                    "  UNION ALL " +
+                    "  SELECT n.id, n.parent_id FROM nodes n JOIN tree t ON n.parent_id = t.id" +
+                    ") " +
+                    "SELECT id FROM tree WHERE id = $2",
+                    [share.node_id, requestedFileId]
+                );
+                allowed = descendant.rows.length > 0;
+            }
+
+            if (!allowed)
+                return res.status(403).json({ error: "Accès refusé" });
+
+            const targetResult = await pool.query(
+                "SELECT id, name, type, mime_type, storage_path " +
+                "FROM nodes WHERE id = $1 AND user_id = $2 AND is_trashed = FALSE",
+                [requestedFileId, share.user_id]
+            );
+
+            if (targetResult.rows.length === 0)
+                return res.status(404).json({ error: "Fichier introuvable" });
+
+            const target = targetResult.rows[0];
+            if (target.type !== "file")
+                return res.status(400).json({ error: "Le noeud demandé n'est pas un fichier" });
+
+            const absoluteFilePath = path.resolve(STORAGE_PATH, target.storage_path || "");
+            if (!fs.existsSync(absoluteFilePath))
+                return res.status(404).json({ error: "Fichier absent du stockage" });
+
+            res.setHeader("Content-Type", target.mime_type || "application/octet-stream");
+            return res.sendFile(absoluteFilePath);
+        }
+
+        // Vue JSON consommée par /public/:token côté frontend
+        if (share.type === "folder") {
+            const children = await pool.query(
+                "SELECT id, name, type, mime_type, size " +
+                "FROM nodes WHERE parent_id = $1 AND user_id = $2 AND is_trashed = FALSE " +
+                "ORDER BY type DESC, name ASC",
+                [share.node_id, share.user_id]
+            );
+
+            return res.json({
+                folder: {
+                    id: share.node_id,
+                    name: share.name,
+                    type: share.type,
+                },
+                children: children.rows,
+            });
+        }
+
+        return res.json({
+            folder: {
+                id: share.node_id,
+                name: share.name,
+                type: share.type,
+            },
+            children: [{
+                id: share.node_id,
+                name: share.name,
+                type: share.type,
+                mime_type: share.mime_type,
+                size: share.size,
+            }],
         });
     } catch (err) {
         console.error("Erreur accès partage public:", err);

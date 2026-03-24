@@ -106,7 +106,7 @@ export default function Login({ onLogin }) {
           type="button"
           style={{ ...styles.btn, ...styles.btnGoogle }}
           onClick={() => {
-            window.location.href = '${API_URL}/api/auth/google';
+            window.location.href = `${API_URL}/api/auth/google`;
           }}
           disabled={loading}
         >
