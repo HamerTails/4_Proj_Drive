@@ -17,6 +17,15 @@ export default function Login({ onLogin }) {
     const token  = params.get('token');
     if (token) {
       localStorage.setItem('token', token);
+      // Décoder le token pour récupérer les infos utilisateur (dont provider)
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        localStorage.setItem('user', JSON.stringify({
+          id:       payload.id,
+          email:    payload.email,
+          provider: payload.provider || null,
+        }));
+      } catch {}
       onLogin();
     }
   }, [onLogin]);
@@ -106,7 +115,7 @@ export default function Login({ onLogin }) {
           type="button"
           style={{ ...styles.btn, ...styles.btnGoogle }}
           onClick={() => {
-            window.location.href = `${API_URL}/api/auth/google`;
+            window.location.href = API_URL + "/api/auth/google";
           }}
           disabled={loading}
         >

@@ -13,4 +13,4 @@ SUPFILE est une plateforme de stockage cloud permettant aux utilisateurs de stoc
 ## Lancement du projet 
 
 '''bash 
-docker compose up--build
+docker compose up --build

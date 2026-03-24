@@ -167,13 +167,20 @@ router.get("/google/callback", (req, res, next) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, email: user.email },
+            { id: user.id, email: user.email, provider: "google" },
             process.env.JWT_SECRET,
             { expiresIn: "7d" }
         );
 
         return res.redirect(`${webUrl}/login?token=${encodeURIComponent(token)}`);
     })(req, res, next);
+});
+
+router.get("/google/logout", (req, res) => {
+    // On ne peut pas forcer la déconnexion Google côté serveur
+    // On redirige simplement vers la page de login de l'appli
+    const webUrl = process.env.WEB_URL || "http://localhost:3001";
+    res.redirect(webUrl + "/login");
 });
 
 module.exports = router;
