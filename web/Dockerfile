@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# ─── Étape 1 : Build Vite ─────────────────────────────────────
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -7,6 +8,28 @@ RUN npm install
 
 COPY . .
 
-EXPOSE 3000
+# VITE_API_URL est passé au moment du build via docker-compose
+ARG VITE_API_URL=http://localhost:3000
+ENV VITE_API_URL=$VITE_API_URL
 
-CMD ["npm", "run", "dev", "--", "--host"]
+RUN npm run build
+
+# ─── Étape 2 : Servir avec nginx ──────────────────────────────
+FROM nginx:alpine
+
+# Copier le build Vite dans nginx
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Config nginx pour React Router (renvoie index.html pour toutes les routes)
+RUN echo 'server { \
+    listen 80; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

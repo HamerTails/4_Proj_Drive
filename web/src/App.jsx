@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
+import { storageService } from './services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const QUOTA_MAX = 30 * 1024 ** 3; // 30 Go en bytes
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/api';
@@ -56,10 +55,9 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
   const [quota, setQuota] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    axios.get(API_URL + '/api/storage/usage', { headers: { Authorization: 'Bearer ' + token } })
-      .then(r => setQuota(r.data))
-      .catch(() => {});
+    storageService.getUsage()
+      .then(function(data) { setQuota(data); })
+      .catch(function() {});
   }, []);
 
   const [sidebarWidth, setSidebarWidth] = useState(
@@ -228,16 +226,7 @@ function AppContent() {
     setIsAuth(false);
     setActiveView('files');
 
-    // Si l'utilisateur était connecté via Google,
-    // on charge silencieusement la page de déconnexion Google dans un iframe
-    // pour couper sa session sans le rediriger ailleurs
-    if (user && user.provider === 'google') {
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = 'https://accounts.google.com/logout';
-      document.body.appendChild(iframe);
-      setTimeout(() => document.body.removeChild(iframe), 3000);
-    }
+
   };
 
   const handleLogin = () => {

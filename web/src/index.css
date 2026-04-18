@@ -433,16 +433,14 @@ body {
   background: var(--bg-secondary);
 }
 
-.files-table-header span {
+.files-table-header > * {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-}
-
-.files-table-header span:nth-child(3) {
-  padding-left: 20px;
+  display: flex;
+  align-items: center;
 }
 
 .file-row {
@@ -512,7 +510,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 400px;
-  padding-left: 20px;
 }
 
 .file-actions {
@@ -893,24 +890,46 @@ div:hover > .grid-actions {
 
 /* responsive tablette */
 @media (max-width: 1024px) {
-  .files-table-header span:nth-child(2),
-  .files-table-header span:nth-child(4),
+  .files-table-header > *:nth-child(3),
+  .files-table-header > *:nth-child(4),
   .file-row > span.file-type-label,
   .file-row > span.file-date { display: none; }
   .files-table-header { grid-template-columns: 1fr 70px 170px; }
   .file-row { grid-template-columns: 1fr 70px 170px; }
+
+  .topbar { flex-wrap: wrap; height: auto; min-height: var(--header-height); padding: 8px 16px; }
+  .search-bar { order: 10; flex-basis: 100%; max-width: 100%; margin-top: 4px; }
 }
 
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .topbar { padding: 0 12px; gap: 8px; }
-  .search-bar { max-width: 100%; }
-  .btn span, .btn-secondary span { display: none; }
+  .topbar { padding: 8px 12px; gap: 6px; flex-wrap: wrap; height: auto; min-height: var(--header-height); }
+  .topbar-title { font-size: 15px; }
+  .search-bar { order: 10; flex-basis: 100%; max-width: 100%; }
+  .topbar-actions { margin-left: auto; }
+  .topbar-actions .btn { padding: 0 8px; font-size: 12px; height: 30px; }
   .files-table-header { display: none; }
-  .file-row { grid-template-columns: 1fr auto; }
+  .file-row { grid-template-columns: 1fr auto; padding: 8px 12px; }
   .file-size, .file-date, .file-type-label { display: none; }
   .file-actions { opacity: 1; }
   .page-content { padding: 12px; }
+
+  .modal { max-width: calc(100vw - 32px); }
+  .modal-preview { max-width: 95vw; }
+  .preview-text { width: 85vw; }
+
+  .breadcrumb { font-size: 13px; }
+}
+
+@media (max-width: 480px) {
+  .topbar-title { font-size: 14px; }
+  .topbar-actions .btn { padding: 0 6px; font-size: 11px; height: 28px; }
+  .topbar-actions .btn svg { display: none; }
+  .file-name { font-size: 13px; }
+  .file-name-cell { gap: 6px; }
+  .file-actions .btn-icon { width: 28px; height: 28px; }
+  .page-content { padding: 8px; }
+  .breadcrumb { margin-bottom: 12px; }
 }
 
 /* ── Corbeille : grille 4 colonnes ── */
@@ -929,3 +948,14 @@ div:hover > .grid-actions {
 .trash-table .file-row > div:last-child {
   justify-content: flex-end;
 }
+
+[data-theme="dark"] .sidebar-item img,
+[data-theme="dark"] .theme-toggle img,
+[data-theme="dark"] .sidebar-user img {
+  filter: invert(1) brightness(0.85);
+}
+
+[data-theme="dark"] .sidebar-item.active img {
+  filter: invert(1) brightness(1) sepia(1) saturate(3) hue-rotate(190deg);
+}
+/* ── Décalage colonne NOM ── */

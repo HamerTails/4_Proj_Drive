@@ -5,6 +5,7 @@ const fs = require("fs").promises;
 const path = require("path");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
+const { validate, schemas } = require("../middleware/validate");
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
@@ -81,10 +82,9 @@ router.get("/:id/details", authenticateToken, async (req, res) => {
 
 //Créer un nouveau dossier
 
-router.post("/folder", authenticateToken, async (req, res) => {
+router.post("/folder", authenticateToken, validate(schemas.createFolder), async (req, res) => {
     try {
         const { name, parent_id } = req.body;
-        if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
 
         const result = await pool.query(
             "INSERT INTO nodes (user_id, parent_id, type, name) VALUES ($1, $2, 'folder', $3) RETURNING *",
@@ -99,11 +99,10 @@ router.post("/folder", authenticateToken, async (req, res) => {
 
 // Renommer un node
 
-router.put("/:id/rename", authenticateToken, async (req, res) => {
+router.put("/:id/rename", authenticateToken, validate(schemas.renameNode), async (req, res) => {
     try {
         const { id } = req.params;
         const { name } = req.body;
-        if (!name || !name.trim()) return res.status(400).json({ error: "Nom requis" });
 
         const result = await pool.query(
             'UPDATE nodes SET name = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 AND is_trashed = FALSE RETURNING *',

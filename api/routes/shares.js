@@ -7,14 +7,14 @@ const path      = require("path");
 const fs        = require("fs");
 const pool      = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
+const { validate, schemas } = require("../middleware/validate");
 
 const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
 //créer un lien public
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, validate(schemas.createShare), async (req, res) => {
     try {
         const { node_id, expires_at, password } = req.body;
-        if (!node_id) return res.status(400).json({ error: "node_id requis" });
 
         const nodeCheck = await pool.query(
             "SELECT id FROM nodes WHERE id = $1 AND user_id = $2",
@@ -172,11 +172,9 @@ router.delete("/:id", authenticateToken, async (req, res) => {
 });
 
 // Partager un node avec un autre utilisateur par email
-router.post("/internal", authenticateToken, async (req, res) => {
+router.post("/internal", authenticateToken, validate(schemas.internalShare), async (req, res) => {
     try {
         const { node_id, email } = req.body;
-        if (!node_id || !email)
-            return res.status(400).json({ error: "node_id et email requis" });
 
         const targetUser = await pool.query(
             "SELECT id FROM users WHERE email = $1",

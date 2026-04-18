@@ -1,10 +1,54 @@
 import { useState, useEffect, useRef } from 'react';
-import { fileService } from '../services/api';
+import { fileService, shareService } from '../services/api';
 import { Icon } from '../App';
-import axios from 'axios';
 import { SkeletonFileRow, SkeletonFileCard } from './Skeleton';
 
+import iconFolder from '../../icone/folder.svg';
+import iconImage  from '../../icone/image.svg';
+import iconPdf    from '../../icone/pdf.svg';
+import iconAudio  from '../../icone/audio.svg';
+import iconVideo  from '../../icone/video.svg';
+import iconText   from '../../icone/text.svg';
+import iconOther  from '../../icone/other.svg';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Correction d'encodage : certains noms de fichiers arrivent en latin-1 au lieu d'UTF-8
+var decodeName = (name) => {
+  if (!name) return '—';
+  try {
+    // Tente de détecter et corriger le double encodage latin-1 → UTF-8
+    var bytes = new Uint8Array(name.length);
+    for (var i = 0; i < name.length; i++) {
+      bytes[i] = name.charCodeAt(i);
+    }
+    var decoded = new TextDecoder('utf-8').decode(bytes);
+    // Si le décodage produit des caractères valides différents, on l'utilise
+    if (decoded !== name && !/\uFFFD/.test(decoded)) {
+      return decoded;
+    }
+  } catch (e) {
+    // si le décodage échoue, on retourne le nom tel quel
+  }
+  return name;
+};
+
+// filtres disponibles pour la recherche (F1-8)
+const TYPE_FILTERS = [
+  { value: '',      label: 'Tous les types' },
+  { value: 'image', label: 'Images' },
+  { value: 'video', label: 'Vidéos' },
+  { value: 'audio', label: 'Audio' },
+  { value: 'pdf',   label: 'PDF' },
+  { value: 'text',  label: 'Texte' },
+];
+
+const DATE_FILTERS = [
+  { value: '',      label: 'Toutes les dates' },
+  { value: 'today', label: "Aujourd'hui" },
+  { value: 'week',  label: 'Cette semaine' },
+  { value: 'month', label: 'Ce mois' },
+];
 
 // fonctions utilitaires pour détecter le type MIME
 const isImage = (m) => m?.startsWith('image/');
@@ -25,13 +69,13 @@ const getFileCategory = (node) => {
 };
 
 const FILE_ICONS = {
-  folder: '../icone/folder.svg',
-  image:  '../icone/image.svg',
-  pdf:    '../icone/pdf.svg',
-  audio:  '../icone/audio.svg',
-  video:  '../icone/video.svg',
-  text:   '../icone/text.svg',
-  other:  '../icone/other.svg',
+  folder: iconFolder,
+  image:  iconImage,
+  pdf:    iconPdf,
+  audio:  iconAudio,
+  video:  iconVideo,
+  text:   iconText,
+  other:  iconOther,
 };
 
 const FileIcon = ({ category, size = 32 }) => (
@@ -89,6 +133,8 @@ export default function Dashboard({ sharedOnly = false }) {
   const [uploadProgress, setUploadProgress] = useState(null);
   const [dragging, setDragging]             = useState(false);
   const [search, setSearch]                 = useState('');
+  const [filterType, setFilterType]         = useState('');
+  const [filterDate, setFilterDate]         = useState('');
   const [viewMode, setViewMode]             = useState(
     () => localStorage.getItem('viewMode') || 'list'
   );
@@ -121,7 +167,6 @@ export default function Dashboard({ sharedOnly = false }) {
   const [selectedIds, setSelectedIds] = useState([]);
 
   const fileInputRef = useRef();
-  const token = localStorage.getItem('token');
 
   useEffect(() => {
     if (sharedOnly) {
@@ -158,10 +203,8 @@ export default function Dashboard({ sharedOnly = false }) {
   const loadSharedWithMe = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(API_URL + '/api/shares/internal', {
-        headers: { Authorization: 'Bearer ' + token },
-      });
-      setSharedWithMe(res.data.shared || []);
+      const data = await shareService.getSharedWithMe();
+      setSharedWithMe(data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -206,11 +249,7 @@ export default function Dashboard({ sharedOnly = false }) {
     if (!draggedNode || draggedNode.id === targetFolder.id) return;
 
     try {
-      await axios.put(
-        API_URL + '/api/nodes/' + draggedNode.id + '/move',
-        { parent_id: targetFolder.id },
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
+      await fileService.moveNode(draggedNode.id, targetFolder.id);
       loadNodes();
     } catch (err) {
       alert('Impossible de déplacer : ' + (err.response?.data?.error || err.message));
@@ -226,11 +265,7 @@ export default function Dashboard({ sharedOnly = false }) {
     if (!draggedNode) return;
 
     try {
-      await axios.put(
-        API_URL + '/api/nodes/' + draggedNode.id + '/move',
-        { parent_id: null },
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
+      await fileService.moveNode(draggedNode.id, null);
       loadNodes();
     } catch (err) {
       alert('Impossible de déplacer : ' + (err.response?.data?.error || err.message));
@@ -273,7 +308,7 @@ export default function Dashboard({ sharedOnly = false }) {
     }
 
     if (isText(node.mime_type, node.name)) {
-      const res = await fetch(API_URL + '/api/files/' + node.id + '/preview?token=' + token);
+      var res = await fetch(fileService.previewUrl(node.id));
       setPreviewText(await res.text());
       setPreviewFile(node);
       return;
@@ -290,7 +325,8 @@ export default function Dashboard({ sharedOnly = false }) {
       return;
     }
 
-    window.open(fileService.downloadFile(node.id), '_blank');
+    // Pour les autres types de fichiers, ouvrir les détails au lieu de télécharger
+    setDetailNode(node);
   };
 
   // --- Créer un dossier ---
@@ -368,15 +404,8 @@ export default function Dashboard({ sharedOnly = false }) {
   const generateLink = async () => {
     setShareLoading(true);
     try {
-      const body = { node_id: shareNode.id };
-      if (sharePassword) body.password = sharePassword;
-      if (shareExpires)  body.expires_at = shareExpires;
-
-      const res = await axios.post(API_URL + '/api/shares', body, {
-        headers: { Authorization: 'Bearer ' + token },
-      });
-
-      const t = res.data.link.split('/').pop();
+      var res = await shareService.createPublicLink(shareNode.id, sharePassword, shareExpires);
+      var t = res.link.split('/').pop();
       setShareLink(window.location.origin + '/public/' + t);
     } catch {
       setShareLink('Erreur génération lien');
@@ -391,11 +420,7 @@ export default function Dashboard({ sharedOnly = false }) {
     e.preventDefault();
     setShareStatus('Envoi...');
     try {
-      await axios.post(
-        API_URL + '/api/shares/internal',
-        { node_id: shareNode.id, email: shareEmail },
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
+      await shareService.createInternalShare(shareNode.id, shareEmail);
       setShareStatus('✓ Partagé avec succès !');
       setShareEmail('');
     } catch (e) {
@@ -403,13 +428,39 @@ export default function Dashboard({ sharedOnly = false }) {
     }
   };
 
-  // liste filtrée selon la recherche
+  // liste filtrée selon la recherche + filtres type/date (F1-8)
   const baseNodes    = sharedOnly ? sharedWithMe : nodes;
-  const displayNodes = search.trim()
-    ? baseNodes.filter((n) =>
-        n.name.toLowerCase().includes(search.trim().toLowerCase())
-      )
-    : baseNodes;
+  const displayNodes = baseNodes.filter((n) => {
+    // filtre texte
+    if (search.trim() && !n.name.toLowerCase().includes(search.trim().toLowerCase())) {
+      return false;
+    }
+    // filtre par type (F1-8)
+    if (filterType) {
+      var cat = getFileCategory(n);
+      if (filterType === 'image' && cat !== 'image') return false;
+      if (filterType === 'video' && cat !== 'video') return false;
+      if (filterType === 'audio' && cat !== 'audio') return false;
+      if (filterType === 'pdf'   && cat !== 'pdf')   return false;
+      if (filterType === 'text'  && cat !== 'text')  return false;
+    }
+    // filtre par date (F1-8)
+    if (filterDate && n.created_at) {
+      var now   = new Date();
+      var created = new Date(n.created_at);
+      if (filterDate === 'today') {
+        if (created.toDateString() !== now.toDateString()) return false;
+      } else if (filterDate === 'week') {
+        var weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (created < weekAgo) return false;
+      } else if (filterDate === 'month') {
+        if (created.getMonth() !== now.getMonth() || created.getFullYear() !== now.getFullYear()) return false;
+      }
+    }
+    return true;
+  });
+
+  var hasActiveFilters = filterType || filterDate;
 
   // Style quand un dossier est survolé pendant un drag
   const rowStyle = (node) => ({
@@ -448,6 +499,31 @@ export default function Dashboard({ sharedOnly = false }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+        )}
+
+        {!sharedOnly && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="form-input"
+              style={{ height: 34, width: 'auto', minWidth: 120, fontSize: 13, padding: '0 8px', cursor: 'pointer' }}
+            >
+              {TYPE_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+            <select
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="form-input"
+              style={{ height: 34, width: 'auto', minWidth: 130, fontSize: 13, padding: '0 8px', cursor: 'pointer' }}
+            >
+              {DATE_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -550,34 +626,58 @@ export default function Dashboard({ sharedOnly = false }) {
                   className={'breadcrumb-item ' + (i === breadcrumb.length - 1 ? 'current' : '')}
                   onClick={() => i < breadcrumb.length - 1 && setCurrentFolder(item.id)}
                 >
-                  {item.name}
+                  {decodeName(item.name)}
                 </button>
               </span>
             ))}
           </div>
         )}
 
-        {/* Badge de recherche */}
-        {search.trim() && (
-          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Badge de recherche / filtres actifs */}
+        {(search.trim() || hasActiveFilters) && (
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span className="badge badge-blue">
-              {displayNodes.length} résultat{displayNodes.length !== 1 ? 's' : ''} pour « {search} »
+              {displayNodes.length} résultat{displayNodes.length !== 1 ? 's' : ''}
+              {search.trim() ? (' pour « ' + search + ' »') : ''}
+              {filterType ? (' — type : ' + TYPE_FILTERS.find((f) => f.value === filterType)?.label) : ''}
+              {filterDate ? (' — ' + DATE_FILTERS.find((f) => f.value === filterDate)?.label) : ''}
             </span>
             <button
               className="btn btn-ghost"
               style={{ height: 26, fontSize: 12 }}
-              onClick={() => setSearch('')}
+              onClick={() => { setSearch(''); setFilterType(''); setFilterDate(''); }}
             >
-              Effacer
+              Effacer les filtres
             </button>
           </div>
         )}
 
         {/* États : chargement / vide / liste / grille */}
         {loading ? (
-          <div className="empty-state">
-            <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Chargement…</div>
-          </div>
+          viewMode === 'list' ? (
+            <div className="files-table">
+              <div className="files-table-header">
+                <div className="file-name-cell"><span style={{ width: 28 }}></span><span>Nom</span></div>
+                <span>Taille</span>
+                <span>Type</span>
+                <span>Date</span>
+                <span></span>
+              </div>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <SkeletonFileRow key={i} />
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+              gap: 12,
+            }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <SkeletonFileCard key={i} />
+              ))}
+            </div>
+          )
 
         ) : displayNodes.length === 0 ? (
           <div className="empty-state">
@@ -601,7 +701,7 @@ export default function Dashboard({ sharedOnly = false }) {
           /* ── Vue liste ── */
           <div className="files-table">
             <div className="files-table-header">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="file-name-cell">
                 <input
                   type="checkbox"
                   style={{ cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
@@ -612,8 +712,9 @@ export default function Dashboard({ sharedOnly = false }) {
                   onChange={toggleSelectAll}
                   onClick={(e) => e.stopPropagation()}
                 />
-                Nom
-              </span>
+                <span style={{ width: 28, flexShrink: 0 }}></span>
+                <span>Nom</span>
+              </div>
               <span>Taille</span>
               <span>Type</span>
               <span>Date</span>
@@ -664,7 +765,7 @@ export default function Dashboard({ sharedOnly = false }) {
                       onClick={(e) => e.stopPropagation()}
                     />
                     <FileIcon category={cat} size={28} />
-                    <span className="file-name">{node.name}</span>
+                    <span className="file-name">{decodeName(node.name)}</span>
                   </div>
 
                   <span className="file-size">
@@ -870,7 +971,7 @@ export default function Dashboard({ sharedOnly = false }) {
                     lineHeight: 1.3,
                     maxWidth:   '100%',
                   }}>
-                    {node.name}
+                    {decodeName(node.name)}
                   </span>
 
                   <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
@@ -975,7 +1076,7 @@ export default function Dashboard({ sharedOnly = false }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <span className="modal-title">{previewFile.name}</span>
+              <span className="modal-title">{decodeName(previewFile.name)}</span>
               <div style={{ display: 'flex', gap: 6 }}>
                 <a href={fileService.downloadFile(previewFile.id)} download>
                   <button className="btn btn-secondary" style={{ height: 30, fontSize: 12 }}>
@@ -996,27 +1097,120 @@ export default function Dashboard({ sharedOnly = false }) {
             <div className="modal-body">
               {isImage(previewFile.mime_type) && (
                 <img
-                  src={API_URL + '/api/files/' + previewFile.id + '/preview?token=' + token}
-                  alt={previewFile.name}
+                  src={fileService.previewUrl(previewFile.id)}
+                  alt={decodeName(previewFile.name)}
                   style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: 8 }}
                 />
               )}
               {isPdf(previewFile.mime_type) && (
                 <iframe
-                  src={API_URL + '/api/files/' + previewFile.id + '/preview?token=' + token}
-                  title={previewFile.name}
+                  src={fileService.previewUrl(previewFile.id)}
+                  title={decodeName(previewFile.name)}
                   style={{ width: '92vw', height: '85vh', border: 'none', borderRadius: 8 }}
                 />
               )}
-              {isText(previewFile.mime_type, previewFile.name) && (
-                <pre className="preview-text">{previewText || 'Chargement…'}</pre>
-              )}
+              {isText(previewFile.mime_type, previewFile.name) && (() => {
+                const isCsv = previewFile.name?.endsWith('.csv') || previewFile.mime_type === 'text/csv';
+                const isMd  = previewFile.name?.endsWith('.md');
+
+                if (!previewText) return <div style={{ padding: 20, color: 'var(--text-tertiary)' }}>Chargement…</div>;
+
+                // ── CSV → tableau HTML ──
+                if (isCsv) {
+                  const rows = previewText.trim().split('\n').map((r) => r.split(','));
+                  const headers = rows[0] || [];
+                  const body    = rows.slice(1);
+                  return (
+                    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '80vh' }}>
+                      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+                        <thead>
+                          <tr>
+                            {headers.map((h, i) => (
+                              <th key={i} style={{
+                                background:  'var(--bg-tertiary)',
+                                padding:     '8px 12px',
+                                textAlign:   'left',
+                                fontWeight:  600,
+                                border:      '1px solid var(--border)',
+                                whiteSpace:  'nowrap',
+                                color:       'var(--text-primary)',
+                              }}>
+                                {h.replace(/^"|"$/g, '').trim()}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {body.map((row, i) => (
+                            <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg-primary)' : 'var(--bg-secondary)' }}>
+                              {row.map((cell, j) => (
+                                <td key={j} style={{
+                                  padding:  '7px 12px',
+                                  border:   '1px solid var(--border)',
+                                  fontSize: 12,
+                                  color:    'var(--text-secondary)',
+                                }}>
+                                  {cell.replace(/^"|"$/g, '').trim()}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+
+                // ── Markdown → rendu simple ──
+                if (isMd) {
+                  var html = previewText
+                    .replace(/^#### (.+)$/gm, '<h4 style="margin:12px 0 6px;font-size:14px">$1</h4>')
+                    .replace(/^### (.+)$/gm, '<h3 style="margin:14px 0 6px;font-size:15px">$1</h3>')
+                    .replace(/^## (.+)$/gm,  '<h2 style="margin:16px 0 8px;font-size:17px">$1</h2>')
+                    .replace(/^# (.+)$/gm,   '<h1 style="margin:18px 0 8px;font-size:20px">$1</h1>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+                    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent-text)">$1</a>')
+                    .replace(/`(.+?)`/g,       '<code style="background:var(--bg-tertiary);padding:2px 5px;border-radius:3px;font-size:12px">$1</code>')
+                    .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left:20px;list-style:decimal">$1</li>')
+                    .replace(/^- (.+)$/gm,     '<li style="margin-left:20px;list-style:disc">$1</li>')
+                    .replace(/^> (.+)$/gm,     '<blockquote style="border-left:3px solid var(--accent);padding-left:12px;color:var(--text-secondary);margin:8px 0">$1</blockquote>')
+                    .replace(/---/g,           '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0"/>')
+                    .replace(/\n\n/g,          '<br/><br/>');
+                  return (
+                    <div
+                      style={{ padding: '8px 4px', lineHeight: 1.7, fontSize: 14, color: 'var(--text-primary)', overflowY: 'auto', maxHeight: '80vh' }}
+                      dangerouslySetInnerHTML={{ __html: html }}
+                    />
+                  );
+                }
+
+                // ── Texte brut ──
+                return (
+                  <pre style={{
+                    fontFamily:  'monospace',
+                    fontSize:    13,
+                    lineHeight:  1.6,
+                    whiteSpace:  'pre-wrap',
+                    wordBreak:   'break-word',
+                    color:       'var(--text-primary)',
+                    background:  'var(--bg-secondary)',
+                    padding:     16,
+                    borderRadius: 8,
+                    maxHeight:   '80vh',
+                    overflowY:   'auto',
+                    margin:      0,
+                  }}>
+                    {previewText}
+                  </pre>
+                );
+              })()}
               {isAudio(previewFile.mime_type) && (
                 <audio
                   controls
                   autoPlay
                   style={{ width: '100%', marginTop: 20 }}
-                  src={API_URL + '/api/files/' + previewFile.id + '/stream?token=' + token}
+                  src={fileService.streamUrl(previewFile.id)}
                 />
               )}
               {isVideo(previewFile.mime_type) && (
@@ -1024,7 +1218,7 @@ export default function Dashboard({ sharedOnly = false }) {
                   controls
                   autoPlay
                   style={{ maxWidth: '100%', maxHeight: '82vh', borderRadius: 8 }}
-                  src={API_URL + '/api/files/' + previewFile.id + '/stream?token=' + token}
+                  src={fileService.streamUrl(previewFile.id)}
                 />
               )}
             </div>
@@ -1037,12 +1231,12 @@ export default function Dashboard({ sharedOnly = false }) {
         <div className="modal-overlay" onClick={() => setDetailNode(null)}>
           <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Détails — {detailNode.name}</span>
+              <span className="modal-title">Détails — {decodeName(detailNode.name)}</span>
               <button className="btn-icon" onClick={() => setDetailNode(null)}>✕</button>
             </div>
             <div className="modal-body">
               {[
-                { label: 'Nom',         value: detailNode.name },
+                { label: 'Nom',         value: decodeName(detailNode.name) },
                 { label: 'Type',        value: detailNode.type === 'folder' ? 'Dossier' : (detailNode.mime_type || '—') },
                 { label: 'Taille',      value: detailNode.size
                     ? detailNode.size < 1024 ** 2
@@ -1083,7 +1277,7 @@ export default function Dashboard({ sharedOnly = false }) {
         <div className="modal-overlay" onClick={() => setShareNode(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Partager — {shareNode.name}</span>
+              <span className="modal-title">Partager — {decodeName(shareNode.name)}</span>
               <button className="btn-icon" onClick={() => setShareNode(null)}>✕</button>
             </div>
             <div className="modal-body">

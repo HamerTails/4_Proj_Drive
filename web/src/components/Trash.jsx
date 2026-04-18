@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { trashService } from '../services/api';
+import folderIcon from '../../icone/folder.svg';
+import otherIcon  from '../../icone/other.svg';
 
 const formatSize = (bytes) => {
   if (!bytes)           return '—';
@@ -20,7 +20,7 @@ const formatDate = (iso) => {
 };
 
 function Dialog({ title, message, type = 'confirm', onConfirm, onClose }) {
-  const isConfirm = type === 'confirm';
+  var isConfirm = type === 'confirm';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -59,23 +59,20 @@ function Dialog({ title, message, type = 'confirm', onConfirm, onClose }) {
 }
 
 export default function Trash() {
-  const [items,       setItems]       = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [dialog,      setDialog]      = useState(null);
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  const token   = localStorage.getItem('token');
-  const headers = { Authorization: 'Bearer ' + token };
+  var [items,       setItems]       = useState([]);
+  var [loading,     setLoading]     = useState(true);
+  var [dialog,      setDialog]      = useState(null);
+  var [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
     load();
   }, []);
 
-  const load = async () => {
+  var load = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(API_URL + '/api/trash', { headers });
-      setItems(res.data.trash || []);
+      var data = await trashService.list();
+      setItems(data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -83,30 +80,30 @@ export default function Trash() {
     }
   };
 
-  const confirm = (title, message, onConfirm) => {
+  var confirm = (title, message, onConfirm) => {
     setDialog({ title, message, type: 'confirm', onConfirm });
   };
 
-  const notify = (title, message) => {
+  var notify = (title, message) => {
     setDialog({ title, message, type: 'info' });
   };
 
-  const restore = async (id) => {
+  var restore = async (id) => {
     try {
-      await axios.put(API_URL + '/api/trash/' + id + '/restore', {}, { headers });
+      await trashService.restore(id);
       load();
     } catch (e) {
       notify('Erreur', e.response?.data?.error || e.message);
     }
   };
 
-  const deletePermanent = (id, name) => {
+  var deletePermanent = (id, name) => {
     confirm(
       'Supprimer définitivement',
       '"' + name + '" sera supprimé définitivement. Cette action est irréversible.',
       async () => {
         try {
-          await axios.delete(API_URL + '/api/trash/' + id + '/permanent', { headers });
+          await trashService.deletePermanent(id);
           load();
         } catch (e) {
           notify('Erreur', e.response?.data?.error || e.message);
@@ -115,17 +112,15 @@ export default function Trash() {
     );
   };
 
-  // --- Vider toute la corbeille ---
-
-  const emptyTrash = () => {
+  var emptyTrash = () => {
     confirm(
       'Vider la corbeille',
       'Les ' + items.length + ' élément' + (items.length > 1 ? 's' : '') + ' seront supprimés définitivement. Cette action est irréversible.',
       async () => {
-        const errors = [];
-        for (const item of items) {
+        var errors = [];
+        for (var item of items) {
           try {
-            await axios.delete(API_URL + '/api/trash/' + item.id + '/permanent', { headers });
+            await trashService.deletePermanent(item.id);
           } catch (e) {
             errors.push(item.name);
           }
@@ -134,23 +129,21 @@ export default function Trash() {
         if (errors.length > 0) {
           notify(
             'Suppression partielle',
-            'Ces éléments n\'ont pas pu être supprimés : ' + errors.join(', ')
+            "Ces éléments n'ont pas pu être supprimés : " + errors.join(', ')
           );
         }
       }
     );
   };
 
-  // --- Sélection multiple ---
-
-  const toggleSelect = (id, e) => {
+  var toggleSelect = (id, e) => {
     e.stopPropagation();
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  const toggleSelectAll = (e) => {
+  var toggleSelectAll = (e) => {
     e.stopPropagation();
     if (selectedIds.length === items.length) {
       setSelectedIds([]);
@@ -159,24 +152,24 @@ export default function Trash() {
     }
   };
 
-  const restoreSelected = async () => {
-    for (const id of selectedIds) {
+  var restoreSelected = async () => {
+    for (var id of selectedIds) {
       try {
-        await axios.put(API_URL + '/api/trash/' + id + '/restore', {}, { headers });
+        await trashService.restore(id);
       } catch {}
     }
     setSelectedIds([]);
     load();
   };
 
-  const deleteSelected = () => {
+  var deleteSelected = () => {
     confirm(
       'Supprimer définitivement',
       selectedIds.length + ' élément(s) seront supprimés définitivement. Cette action est irréversible.',
       async () => {
-        for (const id of selectedIds) {
+        for (var id of selectedIds) {
           try {
-            await axios.delete(API_URL + '/api/trash/' + id + '/permanent', { headers });
+            await trashService.deletePermanent(id);
           } catch {}
         }
         setSelectedIds([]);
@@ -188,7 +181,6 @@ export default function Trash() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* modale custom */}
       {dialog && (
         <Dialog
           title={dialog.title}
@@ -199,7 +191,6 @@ export default function Trash() {
         />
       )}
 
-      {/* Barre du haut */}
       <div className="topbar">
         <span className="topbar-title">Corbeille</span>
         {items.length > 0 && (
@@ -225,7 +216,14 @@ export default function Trash() {
 
         ) : items.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🗑️</div>
+            <div className="empty-state-icon">
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}>
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4h6v2"/>
+              </svg>
+            </div>
             <div className="empty-state-title">Corbeille vide</div>
             <div className="empty-state-desc">
               Les éléments supprimés apparaîtront ici pendant 30 jours.
@@ -295,7 +293,12 @@ export default function Trash() {
                       onClick={(e) => e.stopPropagation()}
                     />
                     <div className={'file-icon-wrap ' + (item.type === 'folder' ? 'folder' : 'other')}>
-                      {item.type === 'folder' ? '📁' : '📄'}
+                      <img
+                        src={item.type === 'folder' ? folderIcon : otherIcon}
+                        alt={item.type === 'folder' ? 'dossier' : 'fichier'}
+                        width={18}
+                        height={18}
+                      />
                     </div>
                     <span className="file-name" style={{ color: 'var(--text-secondary)' }}>
                       {item.name}

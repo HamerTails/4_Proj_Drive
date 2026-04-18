@@ -1,11 +1,10 @@
 require("dotenv").config();
 const express = require("express");
-const cors    = require("cors");
-const helmet  = require("helmet");
+const cors = require("cors");
+const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const passport = require("passport");
-const app = express();
 
+const app = express();
 
 // Helmet
 app.use(helmet({
@@ -21,14 +20,21 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
+// En dev on accepte tout, en prod on restreint
+const isDev = process.env.NODE_ENV !== 'production';
+
 const allowedOrigins = [
   "http://localhost:3001",
+  "http://localhost:8081",
+  "http://localhost:19006",
+  "http://192.168.1.119:8081",
+  "http://192.168.1.119:19006",
   process.env.WEB_URL,
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isDev || !origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('CORS bloqué pour : ' + origin));
   },
   credentials: true,
@@ -36,11 +42,10 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(passport.initialize());
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: isDev ? 100 : 5, // en dev on est large, en prod on restreint
   message: { error: "Trop de tentatives, réessayez dans une minute." },
   standardHeaders: true,
   legacyHeaders: false,

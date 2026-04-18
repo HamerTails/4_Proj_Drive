@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { storageService } from '../services/api';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
+import iconOther    from '../../icone/other.svg';
+import iconImage    from '../../icone/image.svg';
+import iconPdf      from '../../icone/pdf.svg';
+import iconAudio    from '../../icone/audio.svg';
+import iconVideo    from '../../icone/video.svg';
+import iconText     from '../../icone/text.svg';
 
+var QUOTA_MAX_BYTES = 30 * 1024 ** 3;
 
-
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const QUOTA_MAX_BYTES = 30 * 1024 ** 3;
-
-// formatage de taille lisible
-const fmt = (b) => {
+var fmt = (b) => {
   if (!b || b === 0) return '0 o';
   if (b < 1024 ** 2)  return (b / 1024).toFixed(0) + ' Ko';
   if (b < 1024 ** 3)  return (b / 1024 ** 2).toFixed(1) + ' Mo';
   return (b / 1024 ** 3).toFixed(2) + ' Go';
 };
 
-const fmtDate = (iso) =>
+var fmtDate = (iso) =>
   iso
     ? new Date(iso).toLocaleDateString('fr-FR', {
         day: '2-digit',
@@ -26,16 +27,16 @@ const fmtDate = (iso) =>
       })
     : '—';
 
-const COLORS = {
+var COLORS = {
   Images:    'purple',
-  Vidéos:    'lightblue',
+  'Vidéos':  'lightblue',
   Audio:     'lightgreen',
   Documents: 'lightcoral',
   Texte:     'green',
   Autres:    'lightgray',
 };
 
-const mimeToCategory = (m) => {
+var mimeToCategory = (m) => {
   if (!m)                        return 'Autres';
   if (m.startsWith('image/'))    return 'Images';
   if (m.startsWith('video/'))    return 'Vidéos';
@@ -45,19 +46,18 @@ const mimeToCategory = (m) => {
   return 'Autres';
 };
 
-const mimeToIcon = (m) => {
-  if (!m)                        return '../icone/other.svg';
-  if (m.startsWith('image/'))    return '../icone/image.svg';
-  if (m === 'application/pdf')   return '../icone/pdf.svg';
-  if (m.startsWith('audio/'))    return '../icone/audio.svg';
-  if (m.startsWith('video/'))    return '../icone/video.svg';
-  if (m.startsWith('text/'))     return '../icone/text.svg';
-  return '../icone/other.svg';
+var mimeToIcon = (m) => {
+  if (!m)                        return iconOther;
+  if (m.startsWith('image/'))    return iconImage;
+  if (m === 'application/pdf')   return iconPdf;
+  if (m.startsWith('audio/'))    return iconAudio;
+  if (m.startsWith('video/'))    return iconVideo;
+  if (m.startsWith('text/'))     return iconText;
+  return iconOther;
 };
 
-// graphique camembert
 function CamembertChart({ data }) {
-  const chartData = (data || []).filter((d) => Number(d.value) > 0);
+  var chartData = (data || []).filter((d) => Number(d.value) > 0);
   if (chartData.length === 0) return null;
 
   return (
@@ -110,16 +110,15 @@ function CamembertChart({ data }) {
   );
 }
 
-const Card = ({ children, style }) => (
+var Card = ({ children, style }) => (
   <div style={{
     background:   'var(--bg-primary)',
     border:       '1px solid var(--border)',
     borderRadius: 'var(--radius-lg)',
     padding:      '20px 24px',
     boxShadow:    'var(--shadow-sm)',
-    transition: 'all 0.3s ease',
+    transition:   'all 0.3s ease',
     ...style,
-
   }}
   onMouseEnter={(e) => {
     e.currentTarget.style.transform = 'translateY(-2px)';
@@ -128,13 +127,12 @@ const Card = ({ children, style }) => (
   onMouseLeave={(e) => {
     e.currentTarget.style.transform = 'translateY(0)';
     e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-  
   }}>
     {children}
   </div>
 );
 
-const SectionLabel = ({ children }) => (
+var SectionLabel = ({ children }) => (
   <div style={{
     fontSize:       11,
     fontWeight:     700,
@@ -148,54 +146,51 @@ const SectionLabel = ({ children }) => (
 );
 
 export default function DashboardHome({ onNavigateFiles }) {
-  const [usage,     setUsage]     = useState(null);
-  const [recent,    setRecent]    = useState([]);
-  const [breakdown, setBreakdown] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-
-  const token   = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
+  var [usage,     setUsage]     = useState(null);
+  var [recent,    setRecent]    = useState([]);
+  var [breakdown, setBreakdown] = useState([]);
+  var [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
     load();
   }, []);
 
-  const load = async () => {
+  var load = async () => {
     setLoading(true);
 
-    const [u, r, b] = await Promise.allSettled([
-      axios.get(`${API_URL}/api/storage/usage`, { headers }),
-      axios.get(`${API_URL}/api/storage/recent?limit=5`, { headers }),
-      axios.get(`${API_URL}/api/storage/breakdown`, { headers }),
+    var [u, r, b] = await Promise.allSettled([
+      storageService.getUsage(),
+      storageService.getRecent(5),
+      storageService.getBreakdown(),
     ]);
 
-    if (u.status === 'fulfilled') setUsage(u.value.data);
-    if (r.status === 'fulfilled') setRecent(r.value.data.files || []);
+    if (u.status === 'fulfilled') setUsage(u.value);
+    if (r.status === 'fulfilled') setRecent(u.value?.files || r.value.files || []);
 
     if (b.status === 'fulfilled') {
-      const raw     = b.value.data.breakdown || [];
-      const grouped = {};
+      var raw     = b.value.breakdown || [];
+      var grouped = {};
 
-      for (const row of raw) {
-        const category = row.category || mimeToCategory(row.mime_type);
-        const size = Number(row.total_size || 0);
+      for (var row of raw) {
+        var category = row.category || mimeToCategory(row.mime_type);
+        var size = Number(row.total_size || 0);
         grouped[category] = (grouped[category] || 0) + size;
       }
 
       setBreakdown(
         Object.entries(grouped)
-          .map(([name, value]) => ({ name, value }))
-          .filter((d) => d.value > 0)
-          .sort((a, b) => b.value - a.value)
+          .map(function(entry) { return { name: entry[0], value: entry[1] }; })
+          .filter(function(d) { return d.value > 0; })
+          .sort(function(a, b) { return b.value - a.value; })
       );
     }
 
     setLoading(false);
   };
 
-  const used  = usage?.storage_used || 0;
-  const pct   = Math.min((used / QUOTA_MAX_BYTES) * 100, 100);
-  const gauge =
+  var used  = usage?.storage_used || 0;
+  var pct   = Math.min((used / QUOTA_MAX_BYTES) * 100, 100);
+  var gauge =
     pct > 90 ? 'var(--danger)' :
     pct > 70 ? 'var(--warning)' :
     'var(--accent)';
@@ -203,15 +198,15 @@ export default function DashboardHome({ onNavigateFiles }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="topbar">
-        <span 
-        className="topbar-title"
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          letterSpacing: '0.3px',
-        }}
+        <span
+          className="topbar-title"
+          style={{
+            fontSize: 20,
+            fontWeight: 700,
+            letterSpacing: '0.3px',
+          }}
         >
-          📊 Tableau de bord
+          Tableau de bord
         </span>
         <div className="topbar-actions">
           <button
@@ -224,17 +219,17 @@ export default function DashboardHome({ onNavigateFiles }) {
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';
               e.currentTarget.style.boxShadow = '0 6px 14px rgba(37, 99, 235, 0.25)';
-           }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.2)';
-           }}
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.2)';
+            }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
             </svg>
             Mes fichiers
-        </button>
+          </button>
         </div>
       </div>
 
@@ -268,17 +263,17 @@ export default function DashboardHome({ onNavigateFiles }) {
               }}>
                 <div style={{
                   height:       '100%',
-                  width:        `${pct}%`,
+                  width:        pct + '%',
                   background:   gauge,
                   borderRadius: 999,
                   transition:   'width 0.8s ease',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                  boxShadow:    '0 2px 6px rgba(0,0,0,0.1)',
                 }} />
               </div>
 
               <div style={{
-                fontSize:    12,
-                color:       pct > 90 ? 'var(--danger)' : 'var(--text-tertiary)',
+                fontSize:     12,
+                color:        pct > 90 ? 'var(--danger)' : 'var(--text-tertiary)',
                 marginBottom: 18,
               }}>
                 {pct.toFixed(1)}% — {fmt(QUOTA_MAX_BYTES - used)} disponible
@@ -288,99 +283,102 @@ export default function DashboardHome({ onNavigateFiles }) {
                 {[
                   { label: 'Fichiers', value: usage?.file_count ?? '—' },
                   { label: 'Dossiers', value: usage?.folder_count ?? '—' },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{
-                    background:   'var(--bg-secondary)',
-                    borderRadius: 8,
-                    padding:      '10px 14px',
-                  }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {value}
+                ].map(function(item) {
+                  return (
+                    <div key={item.label} style={{
+                      background:   'var(--bg-secondary)',
+                      borderRadius: 8,
+                      padding:      '10px 14px',
+                    }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {item.value}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{item.label}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{label}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
 
-            {/* Répartition par type */}
             <Card style={{ minHeight: 260 }}>
               <SectionLabel>Répartition par type</SectionLabel>
               {breakdown.length === 0 ? (
                 <div style={{ color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
-                   Aucun fichier pour le moment — ajoutez des fichiers pour voir la répartition
+                  Aucun fichier pour le moment — ajoutez des fichiers pour voir la répartition
                 </div>
               ) : (
                 <CamembertChart data={breakdown} />
               )}
             </Card>
 
-            {/* Fichiers récents */}
             <Card style={{ gridColumn: '1 / -1' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                  <span style={{ fontSize: 16 }}>🕘</span>
-                  <SectionLabel>Fichiers récents</SectionLabel>
-              </div>
+              <SectionLabel>Fichiers récents</SectionLabel>
               {recent.length === 0 ? (
-                <div style={{ 
-                  textAlign: 'center', 
-                  color: 'var(--text-tertiary)', 
+                <div style={{
+                  textAlign: 'center',
+                  color: 'var(--text-tertiary)',
                   fontSize: 13,
-                  paddingTop: 20
-              }}>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>📂</div>
-                Aucun fichier récent — vos derniers fichiers apparaîtront ici
+                  paddingTop: 20,
+                }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}>
+                      <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+                    </svg>
+                  </div>
+                  Aucun fichier récent — vos derniers fichiers apparaîtront ici
                 </div>
               ) : (
-                recent.map((file) => (
-                  <div
-                    key={file.id}
-                    onClick={onNavigateFiles}
-                    style={{
-                      display:    'flex',
-                      alignItems: 'center',
-                      gap:        12,
-                      padding:    '7px 10px',
-                      borderRadius: 8,
-                      cursor:     'pointer',
-                      transition: 'background 120ms',
-                    }}
-                    onMouseEnter={(e) => { 
-                      e.currentTarget.style.background = 'var(--bg-secondary)';
-                      e.currentTarget.style.transform = 'translateX(4px)';
-                    }}  
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.transform = 'translateX(0)';
-                    }}
-                  > 
-                    <img
-                      src={mimeToIcon(file.mime_type)}
-                      width={26}
-                      height={26}
-                      alt=""
-                      style={{ flexShrink: 0 }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize:     13.5,
-                        fontWeight:   500,
-                        color:        'var(--text-primary)',
-                        whiteSpace:   'nowrap',
-                        overflow:     'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>
-                        {file.name}
+                recent.map(function(file) {
+                  return (
+                    <div
+                      key={file.id}
+                      onClick={onNavigateFiles}
+                      style={{
+                        display:      'flex',
+                        alignItems:   'center',
+                        gap:          12,
+                        padding:      '7px 10px',
+                        borderRadius: 8,
+                        cursor:       'pointer',
+                        transition:   'background 120ms',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg-secondary)';
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.transform = 'translateX(0)';
+                      }}
+                    >
+                      <img
+                        src={mimeToIcon(file.mime_type)}
+                        width={26}
+                        height={26}
+                        alt=""
+                        style={{ flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize:     13.5,
+                          fontWeight:   500,
+                          color:        'var(--text-primary)',
+                          whiteSpace:   'nowrap',
+                          overflow:     'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {file.name}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                          {fmt(file.size)}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                        {fmt(file.size)}
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                        {fmtDate(file.created_at)}
                       </div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', flexShrink: 0 }}>
-                      {fmtDate(file.created_at)}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </Card>
 

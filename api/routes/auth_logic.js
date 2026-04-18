@@ -6,6 +6,7 @@ const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const { Pool } = require("pg");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const { validate, schemas } = require("../middleware/validate");
 
 let googleStrategyConfigured = false;
 
@@ -76,15 +77,9 @@ function configureGoogleStrategy() {
 configureGoogleStrategy();
 
 // Inscription
-router.post("/register", async (req, res) => {
+router.post("/register", validate(schemas.register), async (req, res) => {
     try {
         const { email, password } = req.body;
-        if (!email || !password)
-            return res.status(400).json({ error: "Email et mot de passe requis" });
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email))
-            return res.status(400).json({ error: "Email invalide" });
 
         const existingUser = await pool.query(
             "SELECT * FROM users WHERE email = $1",
@@ -113,7 +108,7 @@ router.post("/register", async (req, res) => {
 });
 
 // Connexion
-router.post("/login", async (req, res) => {
+router.post("/login", validate(schemas.login), async (req, res) => {
     try {
         const { email, password } = req.body;
         const result = await pool.query(
@@ -178,8 +173,6 @@ router.get("/google/callback", (req, res, next) => {
 });
 
 router.get("/google/logout", (req, res) => {
-    // On ne peut pas forcer la déconnexion Google côté serveur
-    // On redirige simplement vers la page de login de l'appli
     const webUrl = process.env.WEB_URL || "http://localhost:3001";
     res.redirect(webUrl + "/login");
 });

@@ -1,134 +1,254 @@
-import axios from 'axios';
+var API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+function getToken() {
+  return localStorage.getItem('token');
+}
 
-const api = axios.create({
-  baseURL: API_URL,
-});
+function authHeaders() {
+  var token = getToken();
+  var h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = 'Bearer ' + token;
+function authHeadersRaw() {
+  var token = getToken();
+  var h = {};
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+
+async function request(method, path, body, options) {
+  var url = API_URL + path;
+  var opts = {
+    method: method,
+    headers: authHeaders(),
+    ...options,
+  };
+
+  if (body && !(body instanceof FormData)) {
+    opts.body = JSON.stringify(body);
+  } else if (body instanceof FormData) {
+    opts.headers = authHeadersRaw();
+    opts.body = body;
   }
-  return config;
-});
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // token expiré ou invalide => déconnexion
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-      return Promise.reject(error);
-    }
-    if (!error.response) {
-      window.__toastError?.('Erreur réseau — vérifiez votre connexion.');
-    }
-    return Promise.reject(error);
+  var res = await fetch(url, opts);
+
+  if (res.status === 401) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    throw new Error('Session expirée');
   }
-);
 
-export const authService = {
-  register: async (email, password) => {
-    const response = await api.post('/auth/register', { email, password });
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+  if (!res.ok) {
+    var errData = null;
+    try { errData = await res.json(); } catch (e) { /* pas de JSON */ }
+    var err = new Error(errData?.error || 'Erreur ' + res.status);
+    err.response = { status: res.status, data: errData };
+    throw err;
+  }
+
+  var contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return res.json();
+  }
+  return res;
+}
+
+// --- Auth ---
+
+export var authService = {
+  register: async function (email, password) {
+    var data = await request('POST', '/auth/register', { email: email, password: password });
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
     }
-    return response.data;
+    return data;
   },
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+  login: async function (email, password) {
+    var data = await request('POST', '/auth/login', { email: email, password: password });
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
     }
-    return response.data;
+    return data;
   },
-  logout: () => {
+  logout: function () {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
-  getCurrentUser: () => {
-    const user = localStorage.getItem('user');
+  getCurrentUser: function () {
+    var user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
-  isAuthenticated: () => {
+  isAuthenticated: function () {
     return !!localStorage.getItem('token');
-  }
+  },
 };
 
-export const fileService = {
-  getNodes: async (parentId = null) => {
-    const params = parentId ? { parent_id: parentId } : {};
-    const response = await api.get('/nodes', { params });
-    return response.data.nodes;
+// --- Files ---
+
+export var fileService = {
+  getNodes: async function (parentId) {
+    var q = parentId ? '?parent_id=' + parentId : '';
+    var data = await request('GET', '/nodes' + q);
+    return data.nodes;
   },
 
-  getPath: async (nodeId) => {
-    const response = await api.get('/nodes/breadcrumb', { params: { id: nodeId } });
-    return response.data.path;
+  getPath: async function (nodeId) {
+    var data = await request('GET', '/nodes/breadcrumb?id=' + nodeId);
+    return data.path;
   },
 
-  // Création dossier : endpoint correct
-  createFolder: async (name, parentId = null) => {
-    const response = await api.post('/nodes/folder', { name, parent_id: parentId });
-    return response.data;
+  createFolder: async function (name, parentId) {
+    return request('POST', '/nodes/folder', { name: name, parent_id: parentId || null });
   },
 
-  uploadFile: async (file, parentId = null, onProgress) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (parentId) formData.append('parent_id', parentId);
-    const response = await api.post('/files/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress(percentCompleted);
+  uploadFile: async function (file, parentId, onProgress) {
+    var fd = new FormData();
+    fd.append('file', file);
+    if (parentId) fd.append('parent_id', parentId);
+
+    // fetch ne supporte pas onUploadProgress nativement
+    // On utilise XMLHttpRequest pour la progression
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', API_URL + '/files/upload');
+
+      var token = getToken();
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded * 100) / e.total));
         }
-      }
+      };
+
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          var errData = null;
+          try { errData = JSON.parse(xhr.responseText); } catch (e) {}
+          var err = new Error(errData?.error || 'Erreur upload');
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = function () {
+        reject(new Error('Erreur réseau'));
+      };
+
+      xhr.send(fd);
     });
-    return response.data;
   },
 
-  // Renommage : endpoint correct avec /rename
-  renameNode: async (nodeId, name) => {
-    const response = await api.put('/nodes/' + nodeId + '/rename', { name });
-    return response.data.node;
+  renameNode: async function (nodeId, name) {
+    var data = await request('PUT', '/nodes/' + nodeId + '/rename', { name: name });
+    return data.node;
   },
 
-  moveNode: async (nodeId, parentId) => {
-    const response = await api.put('/nodes/' + nodeId + '/move', { parent_id: parentId });
-    return response.data.node;
+  moveNode: async function (nodeId, parentId) {
+    var data = await request('PUT', '/nodes/' + nodeId + '/move', { parent_id: parentId });
+    return data.node;
   },
 
-  deleteNode: async (nodeId) => {
-    await api.delete('/nodes/' + nodeId);
+  deleteNode: async function (nodeId) {
+    return request('DELETE', '/nodes/' + nodeId);
   },
 
-  downloadFile: (nodeId) => {
-    const token = localStorage.getItem('token');
-    return API_URL + '/files/' + nodeId + '/download?token=' + token;
+  downloadFile: function (nodeId) {
+    return API_URL + '/files/' + nodeId + '/download?token=' + getToken();
   },
 
-  previewUrl: (nodeId) => {
-    const token = localStorage.getItem('token');
-    return API_URL + '/files/' + nodeId + '/preview?token=' + token;
+  previewUrl: function (nodeId) {
+    return API_URL + '/files/' + nodeId + '/preview?token=' + getToken();
   },
 
-  streamUrl: (nodeId) => {
-    const token = localStorage.getItem('token');
-    return API_URL + '/files/' + nodeId + '/stream?token=' + token;
+  streamUrl: function (nodeId) {
+    return API_URL + '/files/' + nodeId + '/stream?token=' + getToken();
   },
 
-  downloadFolderUrl: (folderId) => {
-    const token = localStorage.getItem('token');
-    return API_URL + '/files/folder/' + folderId + '/download?token=' + token;
-  }
+  downloadFolderUrl: function (folderId) {
+    return API_URL + '/files/folder/' + folderId + '/download?token=' + getToken();
+  },
 };
 
-export default api;
+// --- Storage ---
+
+export var storageService = {
+  getUsage: async function () {
+    return request('GET', '/storage/usage');
+  },
+  getBreakdown: async function () {
+    return request('GET', '/storage/breakdown');
+  },
+  getRecent: async function (limit) {
+    return request('GET', '/storage/recent?limit=' + (limit || 5));
+  },
+};
+
+// --- Trash ---
+
+export var trashService = {
+  list: async function () {
+    var data = await request('GET', '/trash');
+    return data.trash || [];
+  },
+  restore: async function (id) {
+    return request('PUT', '/trash/' + id + '/restore');
+  },
+  deletePermanent: async function (id) {
+    return request('DELETE', '/trash/' + id + '/permanent');
+  },
+};
+
+// --- Shares ---
+
+export var shareService = {
+  createPublicLink: async function (nodeId, password, expiresAt) {
+    var body = { node_id: nodeId };
+    if (password) body.password = password;
+    if (expiresAt) body.expires_at = expiresAt;
+    return request('POST', '/shares', body);
+  },
+  createInternalShare: async function (nodeId, email) {
+    return request('POST', '/shares/internal', { node_id: nodeId, email: email });
+  },
+  getSharedWithMe: async function () {
+    var data = await request('GET', '/shares/internal');
+    return data.shared || [];
+  },
+};
+
+// --- Users ---
+
+export var userService = {
+  updateEmail: async function (email, password) {
+    return request('PUT', '/users/email', { email: email, password: password });
+  },
+  updatePassword: async function (password, currentPassword) {
+    return request('PUT', '/users/password', { password: password, currentPassword: currentPassword });
+  },
+  uploadAvatar: async function (file) {
+    var fd = new FormData();
+    fd.append('avatar', file);
+    return request('POST', '/users/avatar', fd);
+  },
+  deleteAccount: async function () {
+    return request('DELETE', '/users/account');
+  },
+  getMe: async function () {
+    return request('GET', '/users/me');
+  },
+  updatePreferences: async function (theme) {
+    return request('PUT', '/users/preferences', { theme: theme });
+  },
+};
+
+// export par défaut pour compatibilité
+export default { request: request };

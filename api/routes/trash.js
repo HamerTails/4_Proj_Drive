@@ -6,7 +6,7 @@ const path      = require("path");
 const pool      = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
 
-const STORAGE_PATH = path.join(__dirname, "../data");
+const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
 // Lister la corbeille
 router.get("/", authenticateToken, async (req, res) => {

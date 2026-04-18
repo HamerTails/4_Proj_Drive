@@ -1,10 +1,6 @@
 import { useState, useRef } from 'react';
-import axios from 'axios';
-import { authService } from '../services/api';
+import { authService, userService } from '../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-// modale d'information simple (juste un message + OK)
 function Dialog({ title, message, onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -26,10 +22,9 @@ function Dialog({ title, message, onClose }) {
   );
 }
 
-// modale de suppression de compte : l'utilisateur doit retaper son email pour confirmer
 function ConfirmDeleteDialog({ userEmail, onConfirm, onClose }) {
-  const [typed, setTyped] = useState('');
-  const match = typed === userEmail;
+  var [typed, setTyped] = useState('');
+  var match = typed === userEmail;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -68,8 +63,7 @@ function ConfirmDeleteDialog({ userEmail, onConfirm, onClose }) {
   );
 }
 
-// section avec titre et bordure optionnelle rouge pour la zone de danger
-const Section = ({ title, danger, children }) => (
+var Section = ({ title, danger, children }) => (
   <div style={{
     background:   'var(--bg-primary)',
     border:       '1px solid ' + (danger ? 'var(--danger)' : 'var(--border)'),
@@ -92,8 +86,7 @@ const Section = ({ title, danger, children }) => (
   </div>
 );
 
-// champ de formulaire avec label et hint optionnel en dessous
-const Field = ({ label, hint, children }) => (
+var Field = ({ label, hint, children }) => (
   <div style={{ marginBottom: 14 }}>
     <label style={{
       display:      'block',
@@ -111,43 +104,37 @@ const Field = ({ label, hint, children }) => (
   </div>
 );
 
-export default function Settings({ theme, toggleTheme, onLogout }) {
-  const token   = localStorage.getItem('token');
-  const headers = { Authorization: 'Bearer ' + token };
-  const user    = authService.getCurrentUser();
+export default function Settings({ theme, toggleTheme }) {
+  var user = authService.getCurrentUser();
 
-  const [dialog,     setDialog]     = useState(null);
-  const [showDelete, setShowDelete] = useState(false);
+  var [dialog,     setDialog]     = useState(null);
+  var [showDelete, setShowDelete] = useState(false);
 
-  // avatar
-  const [avatar,     setAvatar]     = useState(null);
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [uploading,  setUploading]  = useState(false);
-  const fileRef = useRef();
+  var [avatar,     setAvatar]     = useState(null);
+  var [avatarFile, setAvatarFile] = useState(null);
+  var [uploading,  setUploading]  = useState(false);
+  var fileRef = useRef();
 
-  // changement d'email
-  const [emailForm,    setEmailForm]    = useState({ email: '', password: '' });
-  const [emailLoading, setEmailLoading] = useState(false);
+  var [emailForm,    setEmailForm]    = useState({ email: '', password: '' });
+  var [emailLoading, setEmailLoading] = useState(false);
 
-  // changement de mot de passe
-  const [pwdForm,    setPwdForm]    = useState({ next: '', confirm: '' });
-  const [pwdLoading, setPwdLoading] = useState(false);
+  var [pwdForm,    setPwdForm]    = useState({ current: '', next: '', confirm: '' });
+  var [pwdLoading, setPwdLoading] = useState(false);
 
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  var [deleteLoading, setDeleteLoading] = useState(false);
 
-  const notify = (title, message) => setDialog({ title, message });
+  var notify = (title, message) => setDialog({ title, message });
 
-  // validation mot de passe en temps réel
-  const pwdLen      = pwdForm.next.length;
-  const pwdTooShort = pwdLen > 0 && pwdLen < 10;
-  const pwdOk       = pwdLen >= 10;
-  const pwdMatch    = pwdOk && pwdForm.confirm && pwdForm.next === pwdForm.confirm;
-  const pwdMismatch = pwdForm.confirm.length > 0 && pwdForm.next !== pwdForm.confirm;
+  var pwdLen      = pwdForm.next.length;
+  var pwdTooShort = pwdLen > 0 && pwdLen < 10;
+  var pwdOk       = pwdLen >= 10;
+  var pwdMatch    = pwdOk && pwdForm.confirm && pwdForm.next === pwdForm.confirm;
+  var pwdMismatch = pwdForm.confirm.length > 0 && pwdForm.next !== pwdForm.confirm;
 
   // --- Avatar ---
 
-  const onAvatarPick = (e) => {
-    const file = e.target.files[0];
+  var onAvatarPick = (e) => {
+    var file = e.target.files[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -163,13 +150,11 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
     setAvatar(URL.createObjectURL(file));
   };
 
-  const uploadAvatar = async () => {
+  var uploadAvatar = async () => {
     if (!avatarFile) return;
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('avatar', avatarFile);
-      await axios.post(API_URL + '/api/users/avatar', fd, { headers });
+      await userService.uploadAvatar(avatarFile);
       notify('Avatar mis à jour', 'Votre photo de profil a bien été enregistrée.');
       setAvatarFile(null);
     } catch (e) {
@@ -181,7 +166,7 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
 
   // --- Email ---
 
-  const changeEmail = async () => {
+  var changeEmail = async () => {
     if (!emailForm.email.includes('@')) {
       notify('Email invalide', 'Saisissez une adresse email valide.');
       return;
@@ -193,11 +178,7 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
 
     setEmailLoading(true);
     try {
-      await axios.post(API_URL + '/api/auth/login', {
-        email: user?.email,
-        password: emailForm.password,
-      });
-      await axios.put(API_URL + '/api/users/email', { email: emailForm.email }, { headers });
+      await userService.updateEmail(emailForm.email, emailForm.password);
       localStorage.setItem('user', JSON.stringify({ ...user, email: emailForm.email }));
       notify('Email modifié', 'Votre adresse email a bien été mise à jour.');
       setEmailForm({ email: '', password: '' });
@@ -214,7 +195,7 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
 
   // --- Mot de passe ---
 
-  const changePassword = async () => {
+  var changePassword = async () => {
     if (pwdTooShort || !pwdOk) {
       notify('Mot de passe trop court', 'Le mot de passe doit contenir au moins 10 caractères.');
       return;
@@ -223,12 +204,16 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
       notify('Mots de passe différents', 'La confirmation ne correspond pas.');
       return;
     }
+    if (!pwdForm.current) {
+      notify('Mot de passe requis', 'Saisissez votre mot de passe actuel.');
+      return;
+    }
 
     setPwdLoading(true);
     try {
-      await axios.put(API_URL + '/api/users/password', { password: pwdForm.next }, { headers });
+      await userService.updatePassword(pwdForm.next, pwdForm.current);
       notify('Mot de passe modifié', 'Votre mot de passe a bien été mis à jour.');
-      setPwdForm({ next: '', confirm: '' });
+      setPwdForm({ current: '', next: '', confirm: '' });
     } catch (e) {
       notify('Erreur', e.response?.data?.error || e.message);
     } finally {
@@ -238,13 +223,12 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
 
   // --- Suppression du compte ---
 
-  const deleteAccount = async () => {
+  var deleteAccount = async () => {
     setShowDelete(false);
     setDeleteLoading(true);
     try {
-      await axios.delete(API_URL + '/api/users/account', { headers });
+      await userService.deleteAccount();
       authService.logout();
-      // on redirige vers la page de connexion
       window.location.href = '/login';
     } catch (e) {
       notify('Erreur', e.response?.data?.error || e.message);
@@ -376,17 +360,17 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
                   label: 'Sombre',
                   icon: <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>,
                 },
-              ].map(({ val, label, icon }) => {
-                const active = theme === val;
+              ].map(function(item) {
+                var active = theme === item.val;
                 return (
                   <button
-                    key={val}
+                    key={item.val}
                     onClick={() => !active && toggleTheme()}
                     style={{
                       flex:           1,
                       padding:        '10px 0',
                       borderRadius:   'var(--radius-md)',
-                      border:         '2px solid ' + active ? 'var(--accent)' : 'var(--border)',
+                      border:         '2px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
                       background:     active ? 'var(--accent-light)' : 'var(--bg-secondary)',
                       color:          active ? 'var(--accent)' : 'var(--text-secondary)',
                       fontWeight:     active ? 600 : 400,
@@ -397,12 +381,13 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
                       alignItems:     'center',
                       justifyContent: 'center',
                       gap:            8,
+                      fontFamily:     'inherit',
                     }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      {icon}
+                      {item.icon}
                     </svg>
-                    {label}
+                    {item.label}
                   </button>
                 );
               })}
@@ -440,6 +425,15 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
 
           {/* Changer le mot de passe */}
           <Section title="Changer le mot de passe">
+            <Field label="Mot de passe actuel">
+              <input
+                className="form-input"
+                type="password"
+                placeholder="••••••••••"
+                value={pwdForm.current}
+                onChange={(e) => setPwdForm((f) => ({ ...f, current: e.target.value }))}
+              />
+            </Field>
             <Field label="Nouveau mot de passe">
               <input
                 className="form-input"
@@ -448,12 +442,12 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
                 value={pwdForm.next}
                 onChange={(e) => setPwdForm((f) => ({ ...f, next: e.target.value }))}
                 style={{
-                  borderColor: pwdTooShort ? 'var(--danger)' : pwdOk ? 'var(--success)' : undefined,
+                  borderColor: pwdTooShort ? 'var(--danger)' : (pwdOk ? 'var(--success)' : undefined),
                 }}
               />
               {pwdTooShort && (
                 <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
-                  {10 - pwdLen} caractère{10 - pwdLen > 1 ? 's' : ''} manquant{10 - pwdLen > 1 ? 's' : ''}
+                  {10 - pwdLen} caractère{(10 - pwdLen > 1) ? 's' : ''} manquant{(10 - pwdLen > 1) ? 's' : ''}
                 </div>
               )}
               {pwdOk && !pwdTooShort && (
@@ -470,7 +464,7 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
                 value={pwdForm.confirm}
                 onChange={(e) => setPwdForm((f) => ({ ...f, confirm: e.target.value }))}
                 style={{
-                  borderColor: pwdMismatch ? 'var(--danger)' : pwdMatch ? 'var(--success)' : undefined,
+                  borderColor: pwdMismatch ? 'var(--danger)' : (pwdMatch ? 'var(--success)' : undefined),
                 }}
               />
               {pwdMismatch && (
@@ -485,7 +479,7 @@ export default function Settings({ theme, toggleTheme, onLogout }) {
             <button
               className="btn btn-primary"
               onClick={changePassword}
-              disabled={pwdLoading || !pwdOk || !pwdMatch}
+              disabled={pwdLoading || !pwdOk || !pwdMatch || !pwdForm.current}
             >
               {pwdLoading ? 'Enregistrement…' : 'Mettre à jour'}
             </button>

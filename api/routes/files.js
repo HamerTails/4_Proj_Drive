@@ -60,10 +60,13 @@ router.post("/upload", authenticateToken, upload.single("file"), async (req, res
         const { parent_id }  = req.body;
         const relativePath   = path.relative(STORAGE_PATH, req.file.path);
 
+        // Correction encodage UTF-8 du nom de fichier (multer peut recevoir latin-1)
+        const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+
         const result = await client.query(
             "INSERT INTO nodes (user_id, parent_id, type, name, storage_path, mime_type, size) " +
             "VALUES ($1, $2, 'file', $3, $4, $5, $6) RETURNING *",
-            [req.user.id, parent_id || null, req.file.originalname, relativePath, req.file.mimetype, req.file.size]
+            [req.user.id, parent_id || null, originalName, relativePath, req.file.mimetype, req.file.size]
         );
 
         // Mise à jour quota
@@ -116,10 +119,11 @@ router.post("/upload-multiple", authenticateToken, uploadMultiple.array("files",
 
         for (const file of req.files) {
             const relativePath = path.relative(STORAGE_PATH, file.path);
+            const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
             const result = await client.query(
                 "INSERT INTO nodes (user_id, parent_id, type, name, storage_path, mime_type, size) " +
                 "VALUES ($1, $2, 'file', $3, $4, $5, $6) RETURNING *",
-                [req.user.id, parent_id || null, file.originalname, relativePath, file.mimetype, file.size]
+                [req.user.id, parent_id || null, originalName, relativePath, file.mimetype, file.size]
             );
             inserted.push(result.rows[0]);
         }
