@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { storageService } from './services/api';
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const QUOTA_MAX = 30 * 1024 ** 3; // 30 Go en bytes
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/api';
@@ -48,10 +48,9 @@ const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 240;
 
 // ─── Layout principal ──────────────────────────────────────────
-function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTheme }) {
-  const user = authService.getCurrentUser();
+function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTheme, user }) {
   const initial = user?.email?.[0]?.toUpperCase() || '?';
-
+  const avatarUrl = getAvatarUrl(user);
   const [quota, setQuota] = useState(null);
 
   useEffect(() => {
@@ -180,7 +179,15 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
 
           {/* User */}
           <div className="sidebar-user" onClick={onLogout} title="Se déconnecter">
-            <div className="sidebar-avatar">{initial}</div>
+            <div className="sidebar-avatar">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="avatar"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : initial}
+            </div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-email">{user?.email}</div>
             </div>
@@ -208,6 +215,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
 function AppContent() {
   const [isAuth, setIsAuth] = useState(authService.isAuthenticated());
   const [activeView, setActiveView] = useState('dashboard');
+  const [user, setUser] = useState(authService.getCurrentUser());
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
@@ -221,16 +229,19 @@ function AppContent() {
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light');
 
   const handleLogout = () => {
-    const user = authService.getCurrentUser();
     authService.logout();
     setIsAuth(false);
+    setUser(null);
     setActiveView('files');
-
-
   };
 
   const handleLogin = () => {
     setIsAuth(true);
+    setUser(authService.getCurrentUser());
+  };
+
+  const refreshUser = () => {
+    setUser(authService.getCurrentUser());
   };
 
   if (!isAuth) {
@@ -250,7 +261,7 @@ function AppContent() {
       case 'files':    return <Dashboard theme={theme} />;
       case 'trash':    return <Trash />;
       case 'shared':   return <Dashboard theme={theme} sharedOnly />;
-      case 'settings': return <Settings theme={theme} toggleTheme={toggleTheme} />;
+      case 'settings': return <Settings theme={theme} toggleTheme={toggleTheme} user={user} onUserUpdated={refreshUser} />;
       default:         return <DashboardHome onNavigateFiles={() => setActiveView('files')} />;
     }
   };
@@ -265,12 +276,20 @@ function AppContent() {
           onLogout={handleLogout}
           theme={theme}
           toggleTheme={toggleTheme}
+          user={user}
         >
           {renderView()}
         </AppLayout>
       } />
     </Routes>
   );
+}
+
+// -- Url avatar -- 
+function getAvatarUrl(user) {
+  if (!user?.id || !user?.avatar_path) return null;
+  const version = encodeURIComponent(user.avatar_path);
+  return `${API_BASE_URL}/api/users/avatar/${user.id}?v=${version}`;
 }
 
 export default function App() {

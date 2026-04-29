@@ -20,7 +20,22 @@ const avatarStorage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname);
-        cb(null, "avatar_" + req.user.id + ext);
+        const dir = path.join(__dirname, "../uploads/avatars");
+        const baseName = "avatar_" + req.user.id;
+
+        try {
+            if (fs.existsSync(dir)) {
+                const existingFiles = fs.readdirSync(dir).filter((name) => name.startsWith(baseName + '.'));
+                existingFiles.forEach((name) => {
+                    const filePath = path.join(dir, name);
+                    try { fs.unlinkSync(filePath); } catch (err) { /* ignore */ }
+                });
+            }
+        } catch (err) {
+            /* ignore */
+        }
+
+        cb(null, baseName + ext);
     },
 });
 const upload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
@@ -63,6 +78,11 @@ router.get("/avatar/:userId", async (req, res) => {
             return res.status(404).json({ error: "Fichier avatar absent du disque" });
         }
 
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0',
+        });
         res.sendFile(path.resolve(avatarPath));
     } catch (e) {
         res.status(500).json({ error: e.message });

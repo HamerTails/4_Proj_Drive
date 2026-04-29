@@ -13,16 +13,20 @@ export default function Login({ onLogin }) {
   const [loading,  setLoading]  = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token  = params.get('token');
-    const error  = params.get('error');
+    async function hydrateUserFromToken() {
+      const params = new URLSearchParams(window.location.search);
+      const token  = params.get('token');
+      const error  = params.get('error');
 
-    // Nettoyer l'URL immédiatement pour éviter la reconnexion au rechargement
-    if (token || error) {
-      window.history.replaceState({}, '', '/login');
-    }
+      if (token || error) {
+        window.history.replaceState({}, '', '/login');
+      }
 
-    if (token) {
+      if (!token) {
+        if (error) setError('Connexion Google échouée, réessayez.');
+        return;
+      }
+
       localStorage.setItem('token', token);
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
@@ -31,13 +35,28 @@ export default function Login({ onLogin }) {
           email:    payload.email,
           provider: payload.provider || null,
         }));
-      } catch {}
+
+        const profile = await fetch(`${API_URL}/api/users/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (profile.ok) {
+          const data = await profile.json();
+          if (data.user) {
+            localStorage.setItem('user', JSON.stringify(data.user));
+          }
+        }
+      } catch (err) {
+        console.error('Impossible de récupérer le profil après OAuth', err);
+      }
+
       onLogin();
     }
 
-    if (error) {
-      setError('Connexion Google échouée, réessayez.');
-    }
+    hydrateUserFromToken();
   }, [onLogin]);
 
   const handleSubmit = async (e) => {

@@ -101,7 +101,16 @@ router.post("/register", validate(schemas.register), async (req, res) => {
             { expiresIn: "7d" }
         );
 
-        res.status(201).json({ message: "Utilisateur créé", user, token });
+        res.status(201).json({
+            message: "Utilisateur créé",
+            user: {
+                id: user.id,
+                email: user.email,
+                avatar_path: null,
+                provider: null,
+            },
+            token,
+        });
     } catch (error) {
         res.status(500).json({ error: "Erreur serveur lors de l'inscription" });
     }
@@ -135,7 +144,12 @@ router.post("/login", validate(schemas.login), async (req, res) => {
 
         res.json({
             message: "Connexion réussie",
-            user: { id: user.id, email: user.email },
+            user: {
+                id: user.id,
+                email: user.email,
+                avatar_path: user.avatar_path || null,
+                provider: user.provider || null,
+            },
             token,
         });
     } catch (error) {

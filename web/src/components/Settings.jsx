@@ -1,5 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { authService, userService } from '../services/api';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+function getAvatarUrl(path, userId) {
+  return path && userId ? `${API_BASE_URL}/api/users/avatar/${userId}` : null;
+}
 
 function Dialog({ title, message, onClose }) {
   return (
@@ -104,8 +109,7 @@ var Field = ({ label, hint, children }) => (
   </div>
 );
 
-export default function Settings({ theme, toggleTheme }) {
-  var user = authService.getCurrentUser();
+export default function Settings({ theme, toggleTheme, user, onUserUpdated }) {
 
   var [dialog,     setDialog]     = useState(null);
   var [showDelete, setShowDelete] = useState(false);
@@ -114,6 +118,10 @@ export default function Settings({ theme, toggleTheme }) {
   var [avatarFile, setAvatarFile] = useState(null);
   var [uploading,  setUploading]  = useState(false);
   var fileRef = useRef();
+
+  useEffect(() => {
+    setAvatar(getAvatarUrl(user?.avatar_path, user?.id));
+  }, [user?.avatar_path, user?.id]);
 
   var [emailForm,    setEmailForm]    = useState({ email: '', password: '' });
   var [emailLoading, setEmailLoading] = useState(false);
@@ -154,9 +162,13 @@ export default function Settings({ theme, toggleTheme }) {
     if (!avatarFile) return;
     setUploading(true);
     try {
-      await userService.uploadAvatar(avatarFile);
-      notify('Avatar mis à jour', 'Votre photo de profil a bien été enregistrée.');
+        var result = await userService.uploadAvatar(avatarFile);
+      var updatedUser = { ...authService.getCurrentUser(), avatar_path: result.avatar_path };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setAvatar(getAvatarUrl(result.avatar_path, updatedUser.id));
       setAvatarFile(null);
+      if (typeof onUserUpdated === 'function') onUserUpdated();
+      notify('Avatar mis à jour', 'Votre photo de profil a bien été enregistrée.');
     } catch (e) {
       notify('Erreur', e.response?.data?.error || e.message);
     } finally {
@@ -179,7 +191,9 @@ export default function Settings({ theme, toggleTheme }) {
     setEmailLoading(true);
     try {
       await userService.updateEmail(emailForm.email, emailForm.password);
-      localStorage.setItem('user', JSON.stringify({ ...user, email: emailForm.email }));
+      var updatedUser = { ...user, email: emailForm.email };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (typeof onUserUpdated === 'function') onUserUpdated();
       notify('Email modifié', 'Votre adresse email a bien été mise à jour.');
       setEmailForm({ email: '', password: '' });
     } catch (e) {
