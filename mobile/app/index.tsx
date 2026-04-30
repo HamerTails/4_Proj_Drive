@@ -1,24 +1,35 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function HomeScreen() {
+export default function Home() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>SUPFile Mobile</Text>
+      <View style={styles.card}>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>S</Text>
+        </View>
 
-      <TouchableOpacity
-        style={styles.btnPrimary}
-        onPress={() => router.push('/login')}>
-        <Text style={styles.textWhite}>Se connecter</Text>
-      </TouchableOpacity>
+        <Text style={styles.title}>SUPFile</Text>
+        <Text style={styles.subtitle}>
+          Stockez et partagez vos fichiers en toute sécurité
+        </Text>
 
-      <TouchableOpacity
-        style={styles.btnSecondary}
-        onPress={() => router.push('/register')}>
-        <Text style={styles.textDark}>Créer un compte</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => router.push('/login')}
+        >
+          <Text style={styles.primaryText}>Se connecter</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push('/register')}
+        >
+          <Text style={styles.secondaryText}>Créer un compte</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -26,35 +37,75 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 24,
     backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    padding: 20,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 40,
+
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  btnPrimary: {
+
+  logo: {
+    width: 70,
+    height: 70,
+    borderRadius: 18,
     backgroundColor: '#2563eb',
-    padding: 14,
-    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  btnSecondary: {
-    backgroundColor: '#e5e7eb',
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  textWhite: {
+
+  logoText: {
     color: '#fff',
+    fontSize: 26,
+    fontWeight: '700',
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+
+  subtitle: {
+    textAlign: 'center',
+    color: '#6b7280',
+    marginBottom: 30,
+  },
+
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+
+  primaryText: {
+    color: '#fff',
+    textAlign: 'center',
     fontWeight: '600',
   },
-  textDark: {
-    color: '#111',
+
+  secondaryButton: {
+    backgroundColor: '#e5e7eb',
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+  },
+
+  secondaryText: {
+    textAlign: 'center',
     fontWeight: '600',
+    color: '#111827',
   },
 });

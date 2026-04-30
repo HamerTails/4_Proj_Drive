@@ -1,5 +1,10 @@
+import { FileProvider } from '@/context/FileContext';
 import { Stack } from 'expo-router';
 
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <FileProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </FileProvider>
+  );
 }
