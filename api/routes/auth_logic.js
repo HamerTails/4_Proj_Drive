@@ -6,7 +6,6 @@ const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const { Pool } = require("pg");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const { validate, schemas } = require("../middleware/validate");
 
 let googleStrategyConfigured = false;
 
@@ -77,9 +76,15 @@ function configureGoogleStrategy() {
 configureGoogleStrategy();
 
 // Inscription
-router.post("/register", validate(schemas.register), async (req, res) => {
+router.post("/register", async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (!email || !password)
+            return res.status(400).json({ error: "Email et mot de passe requis" });
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email))
+            return res.status(400).json({ error: "Email invalide" });
 
         const existingUser = await pool.query(
             "SELECT * FROM users WHERE email = $1",
@@ -101,23 +106,14 @@ router.post("/register", validate(schemas.register), async (req, res) => {
             { expiresIn: "7d" }
         );
 
-        res.status(201).json({
-            message: "Utilisateur créé",
-            user: {
-                id: user.id,
-                email: user.email,
-                avatar_path: null,
-                provider: null,
-            },
-            token,
-        });
+        res.status(201).json({ message: "Utilisateur créé", user, token });
     } catch (error) {
         res.status(500).json({ error: "Erreur serveur lors de l'inscription" });
     }
 });
 
 // Connexion
-router.post("/login", validate(schemas.login), async (req, res) => {
+router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
         const result = await pool.query(
@@ -144,12 +140,7 @@ router.post("/login", validate(schemas.login), async (req, res) => {
 
         res.json({
             message: "Connexion réussie",
-            user: {
-                id: user.id,
-                email: user.email,
-                avatar_path: user.avatar_path || null,
-                provider: user.provider || null,
-            },
+            user: { id: user.id, email: user.email },
             token,
         });
     } catch (error) {
@@ -157,14 +148,31 @@ router.post("/login", validate(schemas.login), async (req, res) => {
     }
 });
 
+// Stockage temporaire des redirections mobiles (TTL 10 min)
+const mobileRedirects = new Map();
+
 router.get("/google", (req, res, next) => {
-    if (!process.env.OAUTH_CLIENT_ID || !process.env.OAUTH_CLIENT_SECRET) {
-        return res.status(500).json({ error: "Google OAuth non configuré sur le serveur" });
+    let stateKey = undefined;
+    if (req.query.mobile_redirect) {
+        stateKey = Math.random().toString(36).slice(2, 10);
+        mobileRedirects.set(stateKey, req.query.mobile_redirect);
+        setTimeout(() => mobileRedirects.delete(stateKey), 10 * 60 * 1000);
     }
     return passport.authenticate("google", {
         scope:   ["profile", "email"],
         session: false,
         prompt:  "select_account",
+        state:   stateKey,
+    })(req, res, next);
+});
+
+// Route dédiée pour l'app Expo (gardée pour compat)
+router.get("/google/expo", (req, res, next) => {
+    return passport.authenticate("google", {
+        scope:   ["profile", "email"],
+        session: false,
+        prompt:  "select_account",
+        state:   "expo",
     })(req, res, next);
 });
 
@@ -172,8 +180,13 @@ router.get("/google/callback", (req, res, next) => {
     passport.authenticate("google", { session: false }, (err, user) => {
         const webUrl = process.env.WEB_URL || "http://localhost:3001";
 
+        // Récupérer le mobile_redirect via state si présent
+        const stateKey = req.query.state;
+        const mobileRedirect = stateKey ? mobileRedirects.get(stateKey) : null;
+        if (stateKey) mobileRedirects.delete(stateKey);
+
         if (err || !user) {
-            return res.redirect(webUrl + "/login?error=oauth_failed");
+            return res.redirect((mobileRedirect || (webUrl + "/login")) + "?error=oauth_failed");
         }
 
         const token = jwt.sign(
@@ -182,6 +195,9 @@ router.get("/google/callback", (req, res, next) => {
             { expiresIn: "7d" }
         );
 
+        if (mobileRedirect) {
+            return res.redirect(mobileRedirect + "?token=" + encodeURIComponent(token));
+        }
         return res.redirect(webUrl + "/login?token=" + encodeURIComponent(token));
     })(req, res, next);
 });

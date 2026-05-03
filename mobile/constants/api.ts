@@ -1,7 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-export const API_URL = 'http://localhost:3000';
+// Sur web : localhost
+// Sur téléphone : on récupère l'IP du serveur Expo automatiquement
+function getApiUrl(): string {
+  if (Platform.OS === 'web') return 'http://localhost:3000';
+  const host = Constants.expoConfig?.hostUri?.split(':')[0];
+  if (host) return `http://${host}:3000`;
+  return 'http://localhost:3000';
+}
+
+export const API_URL = getApiUrl();
+export const MOBILE_URL = Platform.OS === 'web'
+  ? 'http://localhost:8081'
+  : `http://${Constants.expoConfig?.hostUri?.split(':')[0] || 'localhost'}:8081`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -22,6 +36,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
+      // Sur web : rediriger vers la page d'accueil
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
     }
     return Promise.reject(error);
   }
@@ -89,6 +107,11 @@ export const fileService = {
     await api.delete('/api/nodes/' + nodeId);
   },
 
+  moveNode: async (nodeId: string, parentId: string | null) => {
+    const res = await api.put('/api/nodes/' + nodeId + '/move', { parent_id: parentId });
+    return res.data.node;
+  },
+
   uploadFile: async (
     uri: string,
     name: string,
@@ -97,10 +120,21 @@ export const fileService = {
     onProgress?: (pct: number) => void
   ) => {
     const formData = new FormData();
-    formData.append('file', { uri, name, type: mimeType } as any);
+
+    // Sur web (expo web), uri est un blob: URL → il faut récupérer le Blob réel
+    // Sur native, on passe l'objet { uri, name, type } directement
+    if (uri.startsWith('blob:') || uri.startsWith('data:')) {
+      const res  = await fetch(uri);
+      const blob = await res.blob();
+      const file = new File([blob], name, { type: mimeType });
+      formData.append('file', file);
+    } else {
+      formData.append('file', { uri, name, type: mimeType } as any);
+    }
+
     if (parentId) formData.append('parent_id', parentId);
 
-    const res = await api.post('/api/files/upload', formData, {
+    const response = await api.post('/api/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
         if (onProgress && e.total) {
@@ -108,7 +142,7 @@ export const fileService = {
         }
       },
     });
-    return res.data;
+    return response.data;
   },
 
   downloadUrl: (nodeId: string, token: string) => {
@@ -146,6 +180,56 @@ export const storageService = {
   getRecent: async () => {
     const res = await api.get('/api/storage/recent');
     return res.data.files || [];
+  },
+};
+
+export const userService = {
+
+  updatePassword: async (password: string, currentPassword: string) => {
+    const res = await api.put('/api/users/password', { password, currentPassword });
+    return res.data;
+  },
+
+  updateEmail: async (email: string, password: string) => {
+    const res = await api.put('/api/users/email', { email, password });
+    return res.data;
+  },
+
+  updatePreferences: async (theme: string) => {
+    const res = await api.put('/api/users/preferences', { theme });
+    return res.data;
+  },
+};
+
+export const shareService = {
+
+  createPublicLink: async (nodeId: string, password?: string, expiresAt?: string) => {
+    const body: any = { node_id: nodeId };
+    if (password)  body.password   = password;
+    if (expiresAt) body.expires_at = expiresAt;
+    const res = await api.post('/api/shares', body);
+    return res.data;
+  },
+
+  getSharedWithMe: async () => {
+    const res = await api.get('/api/shares/internal');
+    return res.data.shared || [];
+  },
+
+  createInternalShare: async (nodeId: string, email: string) => {
+    const res = await api.post('/api/shares/internal', { node_id: nodeId, email });
+    return res.data;
+  },
+};
+
+export const searchService = {
+
+  search: async (q: string, type?: string, date?: string) => {
+    const params: any = { q };
+    if (type) params.type = type;
+    if (date) params.date = date;
+    const res = await api.get('/api/search', { params });
+    return res.data.results || [];
   },
 };
 

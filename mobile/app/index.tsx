@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -7,9 +8,11 @@ export default function Home() {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>S</Text>
-        </View>
+        <Image
+          source={require('../assets/icons/logo.svg')}
+          style={styles.logo}
+          contentFit="contain"
+        />
 
         <Text style={styles.title}>SUPFile</Text>
         <Text style={styles.subtitle}>
@@ -41,47 +44,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
-
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
   },
-
   logo: {
-    width: 70,
-    height: 70,
-    borderRadius: 18,
-    backgroundColor: '#2563eb',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 80,
+    height: 80,
     marginBottom: 20,
   },
-
-  logoText: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: '700',
-  },
-
   title: {
     fontSize: 26,
     fontWeight: '700',
     color: '#111827',
     marginBottom: 8,
   },
-
   subtitle: {
     textAlign: 'center',
     color: '#6b7280',
     marginBottom: 30,
   },
-
   primaryButton: {
     backgroundColor: '#2563eb',
     width: '100%',
@@ -89,20 +73,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
   },
-
   primaryText: {
     color: '#fff',
     textAlign: 'center',
     fontWeight: '600',
   },
-
   secondaryButton: {
     backgroundColor: '#e5e7eb',
     width: '100%',
     padding: 16,
     borderRadius: 12,
   },
-
   secondaryText: {
     textAlign: 'center',
     fontWeight: '600',
