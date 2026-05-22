@@ -7,35 +7,47 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 
 // Helmet
+// frame-ancestors autorise le web (3001) a embed les routes /preview en iframe (PDF, etc.).
+// frameguard desactive car X-Frame-Options:SAMEORIGIN bloquerait l'iframe cross-origin
+// meme avec frame-ancestors permissif (CSP prime sur les browsers modernes mais pas tous).
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
 
-      "media-src": ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
-      "img-src":   ["'self'", "data:", "http://localhost:3000", process.env.API_URL].filter(Boolean),
-      "frame-src": ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
+      "frame-ancestors": ["'self'", "http://localhost:3001", process.env.WEB_URL].filter(Boolean),
+      "media-src":       ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
+      "img-src":         ["'self'", "data:", "http://localhost:3000", process.env.API_URL].filter(Boolean),
+      "frame-src":       ["'self'", "http://localhost:3000", process.env.API_URL].filter(Boolean),
     },
   },
   crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: false,
 }));
 
-// En dev on accepte tout, en prod on restreint
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Origins autorises explicitement (loopback dev + sous-domaines prod + extras via env)
 const allowedOrigins = [
   "http://localhost:3001",
   "http://localhost:8081",
   "http://localhost:19006",
-  "http://192.168.1.119:8081",
-  "http://192.168.1.119:19006",
+  "https://supfile.hackthehydra.com",
+  "https://api.supfile.hackthehydra.com",
   process.env.WEB_URL,
+  ...(process.env.EXTRA_CORS_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean),
 ].filter(Boolean);
+
+// En dev on tolere les IP LAN privees (Expo Go mobile sur reseau local) sans hardcoder.
+const lanRegex = /^https?:\/\/(?:10\.|127\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)[\d.]+(?::\d+)?$/;
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (isDev || !origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('CORS bloqué pour : ' + origin));
+    // Requetes server-to-server ou outils (curl, expo) sans header Origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isDev && lanRegex.test(origin)) return callback(null, true);
+    callback(new Error('CORS bloque pour : ' + origin));
   },
   credentials: true,
 }));
@@ -109,7 +121,7 @@ app.use((err, req, res, next) => {
   if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({ error: "Fichier trop lourd (max 100 Mo)" });
   }
-  if (err.message?.startsWith("CORS bloqué")) {
+  if (err.message?.startsWith("CORS bloque")) {
     return res.status(403).json({ error: err.message });
   }
   res.status(err.status || 500).json({
@@ -119,12 +131,15 @@ app.use((err, req, res, next) => {
 
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log('✅ API SUPFile démarrée sur le port ' + PORT);
-  try {
-    const checkIntegrity = require("./utils/integrity");
-    checkIntegrity().catch(err => console.warn("[INTEGRITY] Erreur:", err.message));
-  } catch {}
-});
+// On evite de bind sur un port quand Jest charge l'app pour tester ses routes.
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, async () => {
+    console.log('API SUPFile demarree sur le port ' + PORT);
+    try {
+      const checkIntegrity = require("./utils/integrity");
+      checkIntegrity().catch(err => console.warn("[INTEGRITY] Erreur:", err.message));
+    } catch {}
+  });
+}
 
 module.exports = app;

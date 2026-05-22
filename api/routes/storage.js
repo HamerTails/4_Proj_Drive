@@ -4,8 +4,16 @@ const { Pool }  = require("pg");
 const pool      = new Pool({ connectionString: process.env.DATABASE_URL });
 const authenticateToken = require("../middleware/auth");
 
-const TOTAL_QUOTA = 30 * 1024 **3; 
-// 30 Go
+// Quota par utilisateur (configurable via QUOTA_BYTES env var)
+// Par defaut 30 Go. En demo VPS limite, mettre 1 Go = 1073741824.
+const TOTAL_QUOTA = parseInt(process.env.QUOTA_BYTES) || (30 * 1024 ** 3);
+
+function bytesToReadable(bytes) {
+    if (!bytes || bytes < 1024) return (bytes || 0) + " o";
+    const sizes = ["o", "Ko", "Mo", "Go", "To"];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return parseFloat((bytes / Math.pow(1024, i)).toFixed(1)) + " " + sizes[i];
+}
 
 function formatBytes(bytes) {
     if (!bytes || bytes === 0) return "0 o";
@@ -56,7 +64,7 @@ router.get("/usage", authenticateToken, async (req, res) => {
             used: storage_used,   
             total: TOTAL_QUOTA,
             used_readable: formatBytes(storage_used),
-            total_readable: "30 Go",
+            total_readable: bytesToReadable(TOTAL_QUOTA),
             percentage: Math.min(100, ((storage_used / TOTAL_QUOTA) * 100).toFixed(2)),
             file_count,
             folder_count,

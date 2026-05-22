@@ -191,7 +191,10 @@ const deleteExpiredTrash = async () => {
     }
 };
 
-deleteExpiredTrash();
-setInterval(deleteExpiredTrash, 24 * 60 * 60 * 1000);
+// On evite de lancer le cron quand l'app est chargee par Jest pour des tests.
+if (process.env.NODE_ENV !== 'test') {
+    deleteExpiredTrash();
+    setInterval(deleteExpiredTrash, 24 * 60 * 60 * 1000);
+}
 
 module.exports = router;

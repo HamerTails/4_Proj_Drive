@@ -27,10 +27,10 @@ const checkIntegrity = async () => {
     }
 
     if (missing.length === 0) {
-        console.log('[INTEGRITY] ✅ Tous les fichiers sont OK (${ok.length} vérifiés)');
+        console.log(`[INTEGRITY] ✅ Tous les fichiers sont OK (${ok.length} vérifiés)`);
     } else {
-        console.warn('[INTEGRITY] ⚠️  ${missing.length} fichier(s) manquant(s) sur le disque :');
-        missing.forEach(f => console.warn('  - [id=${f.id}] ${f.name} → ${f.storage_path}'));
+        console.warn(`[INTEGRITY] ⚠️  ${missing.length} fichier(s) manquant(s) sur le disque :`);
+        missing.forEach(f => console.warn(`  - [id=${f.id}] ${f.name} → ${f.storage_path}`));
     }
 
     return { total: result.rows.length, ok: ok.length, missing };

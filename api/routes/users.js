@@ -40,9 +40,9 @@ const avatarStorage = multer.diskStorage({
 });
 const upload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-// ───────────────────────────────────────────────
+// --
 // POST /api/users/avatar — Uploader un avatar
-// ───────────────────────────────────────────────
+// --
 router.post("/avatar", authenticateToken, upload.single("avatar"), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
@@ -58,9 +58,9 @@ router.post("/avatar", authenticateToken, upload.single("avatar"), async (req, r
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // GET /api/users/avatar/:userId — Récupérer l'avatar (B2-6)
-// ───────────────────────────────────────────────
+// --
 router.get("/avatar/:userId", async (req, res) => {
     try {
         const result = await pool.query(
@@ -89,9 +89,9 @@ router.get("/avatar/:userId", async (req, res) => {
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // PUT /api/users/email — Changer son email (B2-5 : avec vérification mot de passe)
-// ───────────────────────────────────────────────
+// --
 router.put("/email", authenticateToken, async (req, res) => {
     const { email, password } = req.body;
 
@@ -135,9 +135,9 @@ router.put("/email", authenticateToken, async (req, res) => {
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // PUT /api/users/password — Changer son mot de passe (B2-4 : avec vérification ancien mdp)
-// ───────────────────────────────────────────────
+// --
 router.put("/password", authenticateToken, async (req, res) => {
     const { currentPassword, password } = req.body;
 
@@ -174,9 +174,9 @@ router.put("/password", authenticateToken, async (req, res) => {
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // GET /api/users/me — Infos utilisateur courantes (inclut thème)
-// ───────────────────────────────────────────────
+// --
 router.get("/me", authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
@@ -192,9 +192,9 @@ router.get("/me", authenticateToken, async (req, res) => {
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // PUT /api/users/preferences — Sauvegarder préférences (thème) (B2-7)
-// ───────────────────────────────────────────────
+// --
 router.put("/preferences", authenticateToken, async (req, res) => {
     const { theme } = req.body;
 
@@ -216,9 +216,9 @@ router.put("/preferences", authenticateToken, async (req, res) => {
     }
 });
 
-// ───────────────────────────────────────────────
+// --
 // DELETE /api/users/account — Supprimer son compte
-// ───────────────────────────────────────────────
+// --
 router.delete("/account", authenticateToken, async (req, res) => {
     const client = await pool.connect();
     try {

@@ -15,10 +15,15 @@ router.get("/", authenticateToken, validateQuery(schemas.search), async (req, re
         var conditions = [
             "user_id = $1",
             "is_trashed = FALSE",
-            "name ILIKE $2",
         ];
-        var params = [req.user.id, "%" + q.trim() + "%"];
-        var paramIndex = 3;
+        var params = [req.user.id];
+        var paramIndex = 2;
+
+        if (q && q.trim()) {
+            conditions.push("name ILIKE $" + paramIndex);
+            params.push("%" + q.trim() + "%");
+            paramIndex++;
+        }
 
         if (type) {
             switch (type.toLowerCase()) {
@@ -80,7 +85,7 @@ router.get("/", authenticateToken, validateQuery(schemas.search), async (req, re
         var result = await pool.query(sql, params);
 
         res.json({
-            query:   q.trim(),
+            query:   (q || '').trim(),
             filters: { type: type || null, date: date || null },
             count:   result.rows.length,
             results: result.rows,

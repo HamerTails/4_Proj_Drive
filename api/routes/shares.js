@@ -110,8 +110,12 @@ router.get("/public/:token", async (req, res) => {
             if (target.type !== "file")
                 return res.status(400).json({ error: "Le noeud demandé n'est pas un fichier" });
 
-            const absoluteFilePath = path.resolve(STORAGE_PATH, target.storage_path || "");
-            if (!fs.existsSync(absoluteFilePath))
+            // Garde-fou : pas de storage_path (fichier metadonnees-only, ex. seed) -> 404 JSON propre
+            if (!target.storage_path)
+                return res.status(404).json({ error: "Fichier absent du stockage (storage_path manquant)" });
+
+            const absoluteFilePath = path.resolve(STORAGE_PATH, target.storage_path);
+            if (!fs.existsSync(absoluteFilePath) || !fs.statSync(absoluteFilePath).isFile())
                 return res.status(404).json({ error: "Fichier absent du stockage" });
 
             res.setHeader("Content-Type", target.mime_type || "application/octet-stream");

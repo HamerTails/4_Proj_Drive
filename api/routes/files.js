@@ -12,8 +12,9 @@ const authenticateToken = require("../middleware/auth");
 const pool         = new Pool({ connectionString: process.env.DATABASE_URL });
 const STORAGE_PATH = process.env.STORAGE_PATH || "/data";
 
-// 30 Go
-const TOTAL_QUOTA  = 30 * 1024 **3; 
+// Quota par utilisateur (configurable via QUOTA_BYTES env var)
+// Par defaut 30 Go (cf. cahier des charges). En demo VPS limite, mettre 1 Go = 1073741824.
+const TOTAL_QUOTA  = parseInt(process.env.QUOTA_BYTES) || (30 * 1024 ** 3);
 
 // --- Configuration multer ---
 const storage = multer.diskStorage({
@@ -151,26 +152,31 @@ router.get("/:id/preview", authenticateToken, async (req, res) => {
             "SELECT * FROM nodes WHERE id = $1 AND user_id = $2 AND is_trashed = FALSE",
             [req.params.id, req.user.id]
         );
-        if (result.rows.length === 0) return res.status(404).send("Introuvable");
+        if (result.rows.length === 0) return res.status(404).json({ error: "Introuvable" });
 
-        const file     = result.rows[0];
+        const file = result.rows[0];
+        if (file.type !== "file" || !file.storage_path)
+            return res.status(404).json({ error: "Fichier absent du stockage" });
+
         const filePath = path.join(STORAGE_PATH, file.storage_path);
+        if (!fs.existsSync(filePath))
+            return res.status(404).json({ error: "Fichier absent du stockage" });
 
         // texte brut : TXT, MD, CSV, HTML
         if (
-            file.mime_type.startsWith("text/") ||
+            (file.mime_type && file.mime_type.startsWith("text/")) ||
             file.name.endsWith(".md") ||
             file.name.endsWith(".csv")
         ) {
             res.setHeader("Content-Type", "text/plain; charset=utf-8");
         } else {
-            res.setHeader("Content-Type", file.mime_type);
+            res.setHeader("Content-Type", file.mime_type || "application/octet-stream");
         }
 
         fs.createReadStream(filePath).pipe(res);
     } catch (err) {
         console.error("Erreur preview:", err);
-        res.status(500).send("Erreur preview");
+        res.status(500).json({ error: "Erreur preview" });
     }
 });
 
@@ -181,9 +187,13 @@ router.get("/:id/stream", authenticateToken, async (req, res) => {
             [req.params.id, req.user.id]
         );
         if (result.rows.length === 0) return res.status(404).send("Introuvable");
+        if (result.rows[0].type !== "file" || !result.rows[0].storage_path)
+            return res.status(404).send("Fichier absent du stockage");
 
         const file     = result.rows[0];
         const filePath = path.join(STORAGE_PATH, file.storage_path);
+        if (!fs.existsSync(filePath))
+            return res.status(404).send("Fichier absent du stockage");
         const stat     = fs.statSync(filePath);
         const range    = req.headers.range;
 

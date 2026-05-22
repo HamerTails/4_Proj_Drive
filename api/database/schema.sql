@@ -44,3 +44,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'light';
 
 ALTER TABLE shares ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+-- Index pour les requetes frequentes (listing dossier, corbeille, partages, recherche par token)
+CREATE INDEX IF NOT EXISTS idx_nodes_user_parent     ON nodes (user_id, parent_id, is_trashed);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_trashed    ON nodes (user_id, is_trashed, trashed_at);
+CREATE INDEX IF NOT EXISTS idx_nodes_name_search     ON nodes (user_id, lower(name));
+CREATE INDEX IF NOT EXISTS idx_shares_token          ON shares (token);
+CREATE INDEX IF NOT EXISTS idx_internal_shares_to    ON internal_shares (to_user_id);
+CREATE INDEX IF NOT EXISTS idx_internal_shares_node  ON internal_shares (node_id);
