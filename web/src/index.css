@@ -784,12 +784,19 @@ body {
 
 /* responsive mobile */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  /* sur mobile/tablette, on cache la sidebar — l'app mobile dediee (React Native) est la voie privilegiee */
+  .sidebar,
+  .sidebar-resizer { display: none !important; }
+  .main-content    { margin-left: 0 !important; width: 100% !important; }
   .files-table-header { display: none; }
   .file-row { grid-template-columns: 1fr auto; }
   .file-size, .file-date { display: none; }
   .file-actions { opacity: 1; }
   .page-content { padding: 16px; }
+
+  /* en-tete responsive : afficher le titre de la vue + bouton menu (info app mobile) */
+  .modal { max-width: calc(100vw - 24px); }
+  .modal-preview { max-width: 95vw; }
 }
 
 /* onglets partage */

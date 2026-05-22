@@ -4,10 +4,12 @@ import folderIcon from '../../icone/folder.svg';
 import otherIcon  from '../../icone/other.svg';
 
 const formatSize = (bytes) => {
-  if (!bytes)           return '—';
-  if (bytes < 1024)     return bytes + ' o';
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' Ko';
-  return (bytes / 1024 ** 2).toFixed(1) + ' Mo';
+  const n = Number(bytes);
+  if (!n || n < 0)    return '—';
+  if (n < 1024)       return n + ' o';
+  if (n < 1024 ** 2)  return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3)  return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 };
 
 const formatDate = (iso) => {

@@ -35,7 +35,11 @@ async function request(method, path, body, options) {
 
   var res = await fetch(url, opts);
 
-  if (res.status === 401) {
+  // 401/403 = session invalide -> logout et redirect login.
+  // Sauf sur les endpoints d'auth eux-memes ou un 401/403 = mauvaises credentials,
+  // pas une session expiree, et l'erreur doit etre affichee dans le form.
+  var isAuthEndpoint = path.startsWith('/auth/login') || path.startsWith('/auth/register');
+  if (!isAuthEndpoint && (res.status === 401 || res.status === 403)) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';
@@ -247,6 +251,20 @@ export var userService = {
   },
   updatePreferences: async function (theme) {
     return request('PUT', '/users/preferences', { theme: theme });
+  },
+};
+
+// --- Search (recherche globale recursive sur toutes les nodes user) ---
+
+export var searchService = {
+  search: async function (q, type, date) {
+    var params = [];
+    if (q && q.trim())  params.push('q=' + encodeURIComponent(q.trim()));
+    if (type)           params.push('type=' + encodeURIComponent(type));
+    if (date)           params.push('date=' + encodeURIComponent(date));
+    if (params.length === 0) return { results: [], count: 0 };
+    var data = await request('GET', '/search?' + params.join('&'));
+    return data;
   },
 };
 

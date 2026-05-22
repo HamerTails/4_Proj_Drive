@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fileService, shareService } from '../services/api';
+import { fileService, shareService, searchService } from '../services/api';
 import { Icon } from '../App';
 import { SkeletonFileRow, SkeletonFileCard } from './Skeleton';
 
@@ -89,11 +89,12 @@ const FileIcon = ({ category, size = 32 }) => (
 );
 
 const formatSize = (bytes) => {
-  if (!bytes)           return '—';
-  if (bytes < 1024)     return bytes + ' o';
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' Ko';
-  if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(1) + ' Mo';
-  return (bytes / 1024 ** 3).toFixed(2) + ' Go';
+  const n = Number(bytes);
+  if (!n || n < 0)    return '—';
+  if (n < 1024)       return n + ' o';
+  if (n < 1024 ** 2)  return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3)  return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 };
 
 const formatDate = (iso) => {
@@ -135,6 +136,7 @@ export default function Dashboard({ sharedOnly = false }) {
   const [search, setSearch]                 = useState('');
   const [filterType, setFilterType]         = useState('');
   const [filterDate, setFilterDate]         = useState('');
+  const [searchResults, setSearchResults]   = useState(null); // null = mode listing normal
   const [viewMode, setViewMode]             = useState(
     () => localStorage.getItem('viewMode') || 'list'
   );
@@ -150,6 +152,7 @@ export default function Dashboard({ sharedOnly = false }) {
   const [detailNode, setDetailNode]       = useState(null);
   const [shareNode, setShareNode]         = useState(null);
   const [renameNode, setRenameNode]       = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);  // node a supprimer avec confirmation
   const [renameName, setRenameName]       = useState('');
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -361,12 +364,19 @@ export default function Dashboard({ sharedOnly = false }) {
 
   // --- Supprimer ---
 
-  const handleDelete = async (node) => {
+  const handleDelete = (node) => {
+    setDeleteConfirm(node);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
     try {
-      await fileService.deleteNode(node.id);
+      await fileService.deleteNode(deleteConfirm.id);
+      setDeleteConfirm(null);
       loadNodes();
     } catch (e) {
       window.__toastError?.('Erreur : ' + (e.response?.data?.error || e.message));
+      setDeleteConfirm(null);
     }
   };
 
@@ -428,39 +438,27 @@ export default function Dashboard({ sharedOnly = false }) {
     }
   };
 
-  // liste filtrée selon la recherche + filtres type/date (F1-8)
-  const baseNodes    = sharedOnly ? sharedWithMe : nodes;
-  const displayNodes = baseNodes.filter((n) => {
-    // filtre texte
-    if (search.trim() && !n.name.toLowerCase().includes(search.trim().toLowerCase())) {
-      return false;
-    }
-    // filtre par type (F1-8)
-    if (filterType) {
-      var cat = getFileCategory(n);
-      if (filterType === 'image' && cat !== 'image') return false;
-      if (filterType === 'video' && cat !== 'video') return false;
-      if (filterType === 'audio' && cat !== 'audio') return false;
-      if (filterType === 'pdf'   && cat !== 'pdf')   return false;
-      if (filterType === 'text'  && cat !== 'text')  return false;
-    }
-    // filtre par date (F1-8)
-    if (filterDate && n.created_at) {
-      var now   = new Date();
-      var created = new Date(n.created_at);
-      if (filterDate === 'today') {
-        if (created.toDateString() !== now.toDateString()) return false;
-      } else if (filterDate === 'week') {
-        var weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        if (created < weekAgo) return false;
-      } else if (filterDate === 'month') {
-        if (created.getMonth() !== now.getMonth() || created.getFullYear() !== now.getFullYear()) return false;
-      }
-    }
-    return true;
-  });
-
+  // Si recherche/filtre actif => appel API /search (recursif sur toute l'arbo).
+  // Sinon => listing local du dossier courant.
   var hasActiveFilters = filterType || filterDate;
+  var hasQuery         = search.trim();
+  var searchMode       = hasActiveFilters || hasQuery;
+
+  useEffect(() => {
+    if (!searchMode) { setSearchResults(null); return; }
+    var timer = setTimeout(async () => {
+      try {
+        var r = await searchService.search(search, filterType, filterDate);
+        setSearchResults(r.results || []);
+      } catch (e) {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, filterType, filterDate, searchMode]);
+
+  const baseNodes = sharedOnly ? sharedWithMe : nodes;
+  const displayNodes = searchMode && searchResults !== null ? searchResults : baseNodes;
 
   // Style quand un dossier est survolé pendant un drag
   const rowStyle = (node) => ({
@@ -494,7 +492,9 @@ export default function Dashboard({ sharedOnly = false }) {
               </svg>
             </span>
             <input
-              type="text"
+              type="search"
+              autoComplete="off"
+              name="search-files"
               placeholder="Rechercher des fichiers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -619,17 +619,36 @@ export default function Dashboard({ sharedOnly = false }) {
               Accueil
             </button>
 
-            {breadcrumb.map((item, i) => (
-              <span key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span className="breadcrumb-sep">/</span>
-                <button
-                  className={'breadcrumb-item ' + (i === breadcrumb.length - 1 ? 'current' : '')}
-                  onClick={() => i < breadcrumb.length - 1 && setCurrentFolder(item.id)}
-                >
-                  {decodeName(item.name)}
-                </button>
-              </span>
-            ))}
+            {breadcrumb.map((item, i) => {
+              const isCurrent = i === breadcrumb.length - 1;
+              return (
+                <span key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="breadcrumb-sep">/</span>
+                  <button
+                    className={'breadcrumb-item ' + (isCurrent ? 'current' : '')}
+                    onClick={() => !isCurrent && setCurrentFolder(item.id)}
+                    onDragOver={(e) => {
+                      if (draggedNode && !isCurrent) {
+                        e.preventDefault();
+                        setDropTarget('crumb-' + item.id);
+                      }
+                    }}
+                    onDragLeave={() => setDropTarget(null)}
+                    onDrop={(e) => {
+                      if (!isCurrent) handleDropOnFolder(e, item);
+                    }}
+                    style={{
+                      outline:    dropTarget === 'crumb-' + item.id ? '2px solid var(--accent)' : 'none',
+                      background: dropTarget === 'crumb-' + item.id ? 'var(--accent-light)' : 'transparent',
+                      borderRadius: 4,
+                      transition: 'all 150ms',
+                    }}
+                  >
+                    {decodeName(item.name)}
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
 
@@ -698,7 +717,7 @@ export default function Dashboard({ sharedOnly = false }) {
 
         ) : viewMode === 'list' ? (
 
-          /* ── Vue liste ── */
+          /* -- Vue liste -- */
           <div className="files-table">
             <div className="files-table-header">
               <div className="file-name-cell">
@@ -1009,6 +1028,8 @@ export default function Dashboard({ sharedOnly = false }) {
                   <input
                     className="form-input"
                     type="text"
+                    autoComplete="off"
+                    name="new-folder-name"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     autoFocus
@@ -1029,6 +1050,34 @@ export default function Dashboard({ sharedOnly = false }) {
       )}
 
       {/* Modale - Renommer */}
+      {/* Modale - Confirmation suppression */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Confirmer la suppression</span>
+              <button className="btn-icon" onClick={() => setDeleteConfirm(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: 12 }}>
+                Voulez-vous vraiment déplacer <strong>{decodeName(deleteConfirm.name)}</strong> dans la corbeille ?
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Vous pourrez le restaurer pendant 30 jours depuis la corbeille avant suppression définitive.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>
+                Annuler
+              </button>
+              <button type="button" className="btn" style={{ background: 'var(--danger)', color: 'white' }} onClick={confirmDelete}>
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {renameNode && (
         <div className="modal-overlay" onClick={() => setRenameNode(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -1043,6 +1092,8 @@ export default function Dashboard({ sharedOnly = false }) {
                   <input
                     className="form-input"
                     type="text"
+                    autoComplete="off"
+                    name="rename-node"
                     value={renameName}
                     onChange={(e) => setRenameName(e.target.value)}
                     autoFocus
@@ -1115,7 +1166,7 @@ export default function Dashboard({ sharedOnly = false }) {
 
                 if (!previewText) return <div style={{ padding: 20, color: 'var(--text-tertiary)' }}>Chargement…</div>;
 
-                // ── CSV → tableau HTML ──
+                // -- CSV → tableau HTML --
                 if (isCsv) {
                   const rows = previewText.trim().split('\n').map((r) => r.split(','));
                   const headers = rows[0] || [];
@@ -1161,7 +1212,7 @@ export default function Dashboard({ sharedOnly = false }) {
                   );
                 }
 
-                // ── Markdown → rendu simple ──
+                // -- Markdown → rendu simple --
                 if (isMd) {
                   var html = previewText
                     .replace(/^#### (.+)$/gm, '<h4 style="margin:12px 0 6px;font-size:14px">$1</h4>')
@@ -1185,7 +1236,7 @@ export default function Dashboard({ sharedOnly = false }) {
                   );
                 }
 
-                // ── Texte brut ──
+                // -- Texte brut --
                 return (
                   <pre style={{
                     fontFamily:  'monospace',
@@ -1310,6 +1361,8 @@ export default function Dashboard({ sharedOnly = false }) {
                       <input
                         className="form-input"
                         type="password"
+                        autoComplete="new-password"
+                        name="share-password"
                         placeholder="Laisser vide pour aucun"
                         value={sharePassword}
                         onChange={(e) => setSharePassword(e.target.value)}
@@ -1363,6 +1416,8 @@ export default function Dashboard({ sharedOnly = false }) {
                     <input
                       className="form-input"
                       type="email"
+                      autoComplete="off"
+                      name="share-with-user-email"
                       value={shareEmail}
                       onChange={(e) => setShareEmail(e.target.value)}
                       placeholder="utilisateur@example.com"

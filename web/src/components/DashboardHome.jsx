@@ -12,10 +12,12 @@ import iconText     from '../../icone/text.svg';
 var QUOTA_MAX_BYTES = 30 * 1024 ** 3;
 
 var fmt = (b) => {
-  if (!b || b === 0) return '0 o';
-  if (b < 1024 ** 2)  return (b / 1024).toFixed(0) + ' Ko';
-  if (b < 1024 ** 3)  return (b / 1024 ** 2).toFixed(1) + ' Mo';
-  return (b / 1024 ** 3).toFixed(2) + ' Go';
+  var n = Number(b);
+  if (!n || n < 0) return '0 o';
+  if (n < 1024)      return n + ' o';
+  if (n < 1024 ** 2) return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 };
 
 var fmtDate = (iso) =>
@@ -165,7 +167,7 @@ export default function DashboardHome({ onNavigateFiles }) {
     ]);
 
     if (u.status === 'fulfilled') setUsage(u.value);
-    if (r.status === 'fulfilled') setRecent(u.value?.files || r.value.files || []);
+    if (r.status === 'fulfilled') setRecent(r.value?.files || r.value?.recent || []);
 
     if (b.status === 'fulfilled') {
       var raw     = b.value.breakdown || [];

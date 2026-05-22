@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { storageService } from './services/api';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const QUOTA_MAX = 30 * 1024 ** 3; // 30 Go en bytes
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { authService } from './services/api';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -47,7 +47,7 @@ const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 240;
 
-// ─── Layout principal ──────────────────────────────────────────
+// -- Layout principal --
 function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTheme, user }) {
   const initial = user?.email?.[0]?.toUpperCase() || '?';
   const avatarUrl = getAvatarUrl(user);
@@ -146,12 +146,19 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
         </div>
 
         <div className="sidebar-bottom">
-          {/* ── Jauge quota ── */}
+          {/* -- Jauge quota -- */}
           {quota !== null && (() => {
             const used = quota.storage_used || 0;
             const pct  = Math.min((used / QUOTA_MAX) * 100, 100);
             const color = pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warning)' : 'var(--accent)';
-            const fmt = (b) => b < 1024**3 ? (b/1024**2).toFixed(0)+' Mo' : (b/1024**3).toFixed(1)+' Go';
+            const fmt = (b) => {
+              const n = Number(b);
+              if (!n || n < 0) return '0 o';
+              if (n < 1024)      return n + ' o';
+              if (n < 1024 ** 2) return (n / 1024).toFixed(1) + ' Ko';
+              if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(2) + ' Mo';
+              return (n / 1024 ** 3).toFixed(2) + ' Go';
+            };
             return (
               <div style={{ padding: '6px 12px 10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 5 }}>
@@ -194,7 +201,7 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
             <Icon name="logout" size={14} />
           </div>
         </div>
-        {/* ── Poignée de redimensionnement ── */}
+        {/* -- Poignée de redimensionnement -- */}
         <div
           style={{ position: 'absolute', top: 0, right: 0, width: 5, height: '100%', cursor: 'col-resize', zIndex: 10 }}
           onMouseDown={onMouseDown}
@@ -211,8 +218,9 @@ function AppLayout({ children, activeView, onNavigate, onLogout, theme, toggleTh
   );
 }
 
-// ─── App principale ────────────────────────────────────────────
+// -- App principale --
 function AppContent() {
+  const navigate = useNavigate();
   const [isAuth, setIsAuth] = useState(authService.isAuthenticated());
   const [activeView, setActiveView] = useState('dashboard');
   const [user, setUser] = useState(authService.getCurrentUser());
@@ -233,11 +241,14 @@ function AppContent() {
     setIsAuth(false);
     setUser(null);
     setActiveView('files');
+    navigate('/login', { replace: true });
   };
 
   const handleLogin = () => {
     setIsAuth(true);
     setUser(authService.getCurrentUser());
+    setActiveView('dashboard');
+    navigate('/', { replace: true });
   };
 
   const refreshUser = () => {
