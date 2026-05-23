@@ -1,0 +1,25 @@
+# SUPFile - reverse proxy
+# CORS gere par l API Node (cors package), pas par Caddy (sinon double header).
+
+supfile.hackthehydra.com {
+    encode gzip zstd
+
+    # Download APK : https://supfile.hackthehydra.com/apk
+    handle /apk {
+        header Content-Disposition "attachment; filename=SupFile.apk"
+        header Content-Type "application/vnd.android.package-archive"
+        root * /opt/supfile
+        rewrite * /SupFile.apk
+        file_server
+    }
+
+    # Reste : reverse proxy vers le client web
+    handle {
+        reverse_proxy 127.0.0.1:3001
+    }
+}
+
+api.supfile.hackthehydra.com {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000
+}
