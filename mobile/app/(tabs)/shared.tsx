@@ -3,13 +3,16 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
-function fmt(bytes: number | null) {
-  if (!bytes) return '—';
-  if (bytes < 1024) return bytes + ' o';
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' Ko';
-  return (bytes / 1024 ** 2).toFixed(1) + ' Mo';
+function fmt(bytes: any) {
+  const n = Number(bytes);
+  if (!n || n < 0) return '—';
+  if (n < 1024)      return n + ' o';
+  if (n < 1024 ** 2) return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 }
 
 export default function SharedScreen() {
@@ -26,8 +29,8 @@ export default function SharedScreen() {
   useFocusEffect(useCallback(() => { load(); }, []));
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }}>
-      <Text style={{ marginTop: 40, fontSize: 26, fontWeight: '700', color: colors.text, marginBottom: 16 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }} edges={['top']}>
+      <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, marginBottom: 16 }}>
         Partagés avec moi
       </Text>
 
@@ -67,6 +70,6 @@ export default function SharedScreen() {
           )}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }

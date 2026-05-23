@@ -4,9 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert, Platform, SafeAreaView, ScrollView, Text, TextInput,
+  Alert, Platform, ScrollView, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 export default function ShareScreen() {
   const router = useRouter();
@@ -77,7 +79,8 @@ export default function ShareScreen() {
   const input = { backgroundColor: colors.inputBg, padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: colors.border, fontSize: 14, color: colors.text };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
+      <StatusBar style="auto" />
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: colors.headerBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>

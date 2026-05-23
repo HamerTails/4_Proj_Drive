@@ -3,13 +3,16 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
-function fmt(bytes: number | null) {
-  if (!bytes) return '—';
-  if (bytes < 1024) return bytes + ' o';
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' Ko';
-  return (bytes / 1024 ** 2).toFixed(1) + ' Mo';
+function fmt(bytes: any) {
+  const n = Number(bytes);
+  if (!n || n < 0) return '—';
+  if (n < 1024)      return n + ' o';
+  if (n < 1024 ** 2) return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 }
 
 function fmtDate(iso: string | null) {
@@ -51,8 +54,8 @@ export default function TrashScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }}>
-      <Text style={{ marginTop: 40, fontSize: 26, fontWeight: '700', color: colors.text }}>Corbeille</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }} edges={['top']}>
+      <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text }}>Corbeille</Text>
       <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 4, marginBottom: 16 }}>
         Suppression automatique après 30 jours
       </Text>
@@ -133,6 +136,6 @@ export default function TrashScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }

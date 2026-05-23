@@ -4,16 +4,19 @@ import { getFileIcon } from '../../icons';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Image, Linking, Modal,
-  RefreshControl, ScrollView, SafeAreaView, Text, TextInput,
+  RefreshControl, ScrollView, Text, TextInput,
   TouchableOpacity, View, Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
-// ─── Helpers ──────────────────────────────────────────────────
+// -- Helpers --
 
 function mimeColor(node: any, colors: any) {
   if (node.type === 'folder') return '#f59e0b';
@@ -52,8 +55,10 @@ function fmtDate(iso: string | null) {
 const isImage = (mime: string) => !!mime?.startsWith('image/');
 const isText  = (mime: string, name: string) =>
   !!mime?.startsWith('text/') || name?.endsWith('.md') || name?.endsWith('.csv');
+const isAudio = (mime: string) => !!mime?.startsWith('audio/');
+const isVideo = (mime: string) => !!mime?.startsWith('video/');
 
-// ─── Composant Menu contextuel custom ─────────────────────────
+// -- Composant Menu contextuel custom --
 
 function ContextMenu({
   visible, node, onClose, colors,
@@ -111,7 +116,7 @@ function ContextMenu({
   );
 }
 
-// ─── Composant sélecteur de dossier ───────────────────────────
+// -- Composant sélecteur de dossier --
 
 function FolderPicker({ visible, onClose, onSelect, colors, excludeId }: any) {
   const [folders,  setFolders]  = useState<any[]>([]);
@@ -128,7 +133,9 @@ function FolderPicker({ visible, onClose, onSelect, colors, excludeId }: any) {
     try {
       const data = await fileService.getNodes(parentId);
       setFolders((data || []).filter((n: any) => n.type === 'folder' && String(n.id) !== String(excludeId)));
-    } catch {}
+    } catch (e) {
+      console.warn('[picker] loadFolders failed:', e);
+    }
     setLoading(false);
   };
 
@@ -150,7 +157,7 @@ function FolderPicker({ visible, onClose, onSelect, colors, excludeId }: any) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: colors.headerBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           {currentPicker ? (
             <TouchableOpacity onPress={goBackPicker} style={{ marginRight: 10 }}>
@@ -205,7 +212,7 @@ function FolderPicker({ visible, onClose, onSelect, colors, excludeId }: any) {
   );
 }
 
-// ─── Composant principal ───────────────────────────────────────
+// -- Composant principal --
 
 export default function FilesScreen() {
   const router = useRouter();
@@ -222,9 +229,6 @@ export default function FilesScreen() {
   // Menu contextuel
   const [menuNode,      setMenuNode]      = useState<any>(null);
   const [menuVisible,   setMenuVisible]   = useState(false);
-
-  // Drag & drop par appui long
-  const [dragNode,      setDragNode]      = useState<any>(null);
 
   // Modales
   const [showNewFolder,  setShowNewFolder]  = useState(false);
@@ -254,6 +258,12 @@ export default function FilesScreen() {
     authService.getToken().then((t) => setPreviewToken(t || ''));
   }, []);
 
+  // Reload quand on change de dossier (state change), même sans changement de focus
+  useEffect(() => {
+    if (!searchMode) loadNodes(currentFolder);
+  }, [currentFolder, searchMode]);
+
+  // Reload aussi au focus de l'écran (retour depuis autre tab par ex.)
   useFocusEffect(useCallback(() => {
     if (!searchMode) loadNodes(currentFolder);
   }, [currentFolder, searchMode]));
@@ -263,20 +273,15 @@ export default function FilesScreen() {
     try {
       const data = await fileService.getNodes(parentId);
       setNodes(data || []);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] loadNodes failed:', e);
+    }
     setLoading(false);
   };
 
-  // ─── Navigation ──────────────────────────────────────────────
+  // -- Navigation --
 
   const openFolder = (node: any) => {
-    // Si un fichier est en mode "drag", déplacer dans ce dossier
-    if (dragNode) {
-      setNodeToMove(dragNode);
-      setDragNode(null);
-      doMoveToFolder(dragNode, String(node.id));
-      return;
-    }
     setBreadcrumb((p) => [...p, { id: String(node.id), name: node.name }]);
     setCurrentFolder(String(node.id));
   };
@@ -285,7 +290,9 @@ export default function FilesScreen() {
     try {
       await fileService.moveNode(String(node.id), targetId);
       await loadNodes(currentFolder);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] doMoveToFolder failed:', e);
+    }
   };
 
   const goBack = () => {
@@ -297,11 +304,12 @@ export default function FilesScreen() {
   const goToRoot = () => { setBreadcrumb([]); setCurrentFolder(null); };
 
   const handleLogout = async () => {
-    await authService.logout();
-    router.replace('/');
+    try { await authService.logout(); } catch {}
+    try { (router as any).dismissAll?.(); } catch {}
+    router.replace('/login');
   };
 
-  // ─── Preview ─────────────────────────────────────────────────
+  // -- Preview --
 
   const openPreview = async (node: any) => {
     if (node.type === 'folder') { openFolder(node); return; }
@@ -325,11 +333,18 @@ export default function FilesScreen() {
       return;
     }
 
+    if (isAudio(node.mime_type) || isVideo(node.mime_type)) {
+      const token = await authService.getToken();
+      setPreviewToken(token || '');
+      setPreviewNode(node);
+      return;
+    }
+
     const token = await authService.getToken();
     Linking.openURL(API_URL + '/api/files/' + node.id + '/preview?token=' + token);
   };
 
-  // ─── Téléchargement ──────────────────────────────────────────
+  // -- Téléchargement --
 
   const download = async (node: any) => {
     const token = await authService.getToken();
@@ -340,21 +355,16 @@ export default function FilesScreen() {
     }
   };
 
-  // ─── Upload ──────────────────────────────────────────────────
+  // -- Upload --
 
-  const uploadFile = async () => {
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
+
+  const doUpload = async (uri: string, name: string, mimeType: string) => {
+    setShowUploadMenu(false);
+    setUploading(true);
+    setUploadPct(0);
     try {
-      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
-      if (result.canceled) return;
-      const file = result.assets[0];
-      setUploading(true);
-      setUploadPct(0);
-      await fileService.uploadFile(
-        file.uri, file.name,
-        file.mimeType || 'application/octet-stream',
-        currentFolder,
-        (pct) => setUploadPct(pct),
-      );
+      await fileService.uploadFile(uri, name, mimeType, currentFolder, (pct) => setUploadPct(pct));
       setUploadPct(100);
       await loadNodes(currentFolder);
     } catch (e: any) {
@@ -365,7 +375,45 @@ export default function FilesScreen() {
     }
   };
 
-  // ─── CRUD ────────────────────────────────────────────────────
+  const uploadFromDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      if (result.canceled) return;
+      const f = result.assets[0];
+      await doUpload(f.uri, f.name, f.mimeType || 'application/octet-stream');
+    } catch (e) { console.error(e); setShowUploadMenu(false); }
+  };
+
+  const uploadFromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { setShowUploadMenu(false); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets?.[0]) { setShowUploadMenu(false); return; }
+    const a = result.assets[0];
+    const fallback = (a.type === 'video' ? 'video.mp4' : 'photo.jpg');
+    await doUpload(
+      a.uri,
+      a.fileName || fallback,
+      a.mimeType || (a.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+    );
+  };
+
+  const uploadFromCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { setShowUploadMenu(false); return; }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets?.[0]) { setShowUploadMenu(false); return; }
+    const a = result.assets[0];
+    await doUpload(a.uri, a.fileName || `photo_${Date.now()}.jpg`, a.mimeType || 'image/jpeg');
+  };
+
+  // -- CRUD --
 
   const createFolder = async () => {
     if (!newFolderName.trim()) return;
@@ -373,7 +421,9 @@ export default function FilesScreen() {
       await fileService.createFolder(newFolderName.trim(), currentFolder);
       setShowNewFolder(false); setNewFolderName('');
       await loadNodes(currentFolder);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] createFolder failed:', e);
+    }
   };
 
   const doRename = async () => {
@@ -382,14 +432,18 @@ export default function FilesScreen() {
       await fileService.renameNode(String(renameNode.id), renameName.trim());
       setRenameNode(null); setRenameName('');
       await loadNodes(currentFolder);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] rename failed:', e);
+    }
   };
 
   const deleteNode = async (node: any) => {
     try {
       await fileService.deleteNode(String(node.id));
       await loadNodes(currentFolder);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] delete failed:', e);
+    }
   };
 
   const doMove = async (targetFolderId: string | null) => {
@@ -398,17 +452,19 @@ export default function FilesScreen() {
       await fileService.moveNode(String(nodeToMove.id), targetFolderId);
       setShowMove(false); setNodeToMove(null);
       await loadNodes(currentFolder);
-    } catch {}
+    } catch (e) {
+      console.warn('[files] move failed:', e);
+    }
   };
 
-  // ─── Menu contextuel ─────────────────────────────────────────
+  // -- Menu contextuel --
 
   const openMenu = (node: any) => {
     setMenuNode(node);
     setMenuVisible(true);
   };
 
-  // ─── Recherche ───────────────────────────────────────────────
+  // -- Recherche --
 
   const applyLocalFilter = (q: string, type: string, date: string) => {
     // Si pas de query ET pas de filtre, on retourne tout
@@ -455,7 +511,9 @@ export default function FilesScreen() {
         const query = q.startsWith('.') ? q.slice(1) : q;
         const results = await searchService.search(query, type || undefined, date || undefined);
         setSearchResults(results);
-      } catch {}
+      } catch (e) {
+        console.warn('[files] search failed:', e);
+      }
       setSearching(false);
     }, 400);
   };
@@ -484,39 +542,21 @@ export default function FilesScreen() {
 
   const displayNodes = searchMode ? searchResults : nodes;
 
-  // ─── Render items ─────────────────────────────────────────────
+  // -- Render items --
 
   const renderRow = ({ item }: { item: any }) => {
-    const isDragging = dragNode?.id === item.id;
-    const isDropTarget = dragNode && item.type === 'folder' && dragNode.id !== item.id;
-
     return (
       <TouchableOpacity
         style={{
           flexDirection: 'row', alignItems: 'center',
-          backgroundColor: isDragging ? colors.primary + '33' : isDropTarget ? colors.primary + '22' : colors.card,
+          backgroundColor: colors.card,
           paddingHorizontal: 16, paddingVertical: 14,
           marginHorizontal: 12, marginVertical: 4,
           borderRadius: 12,
-          borderWidth: isDragging ? 2 : isDropTarget ? 2 : 1,
-          borderColor: isDragging ? colors.primary : isDropTarget ? colors.primary : colors.border,
-          opacity: isDragging ? 0.7 : 1,
+          borderWidth: 1,
+          borderColor: colors.border,
         }}
-        onPress={() => {
-          if (dragNode) {
-            if (item.type === 'folder' && item.id !== dragNode.id) {
-              doMoveToFolder(dragNode, String(item.id));
-              setDragNode(null);
-            } else if (item.id === dragNode.id) {
-              setDragNode(null); // désélectionner
-            }
-            return;
-          }
-          openPreview(item);
-        }}
-        onLongPress={() => {
-          if (item.type === 'file') setDragNode(item);
-        }}
+        onPress={() => openPreview(item)}
         activeOpacity={0.7}
       >
         <View style={{ width: 44, alignItems: 'center' }}>
@@ -527,21 +567,16 @@ export default function FilesScreen() {
             {item.name}
           </Text>
           <Text style={{ fontSize: 12, color: colors.textMuted }}>
-            {item.type === 'folder' ? (isDropTarget ? '👆 Déposer ici' : 'Dossier') : fmt(item.size)} · {fmtDate(item.created_at)}
+            {item.type === 'folder' ? 'Dossier' : fmt(item.size)} · {fmtDate(item.created_at)}
           </Text>
         </View>
-        {!dragNode && (
-          <TouchableOpacity
-            onPress={() => openMenu(item)}
-            style={{ padding: 8, marginLeft: 4 }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
-          </TouchableOpacity>
-        )}
-        {isDragging && (
-          <Ionicons name="move" size={20} color={colors.primary} style={{ marginLeft: 8 }} />
-        )}
+        <TouchableOpacity
+          onPress={() => openMenu(item)}
+          style={{ padding: 8, marginLeft: 4 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -576,7 +611,7 @@ export default function FilesScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
 
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.headerBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
@@ -673,7 +708,7 @@ export default function FilesScreen() {
         <View style={{ flexDirection: 'row', gap: 10, padding: 12, backgroundColor: colors.headerBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <TouchableOpacity
             style={{ flex: 1, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.primary }}
-            onPress={uploadFile}
+            onPress={() => setShowUploadMenu(true)}
             disabled={uploading}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12 }}>
@@ -695,21 +730,6 @@ export default function FilesScreen() {
           >
             <Ionicons name="folder-open-outline" size={18} color={colors.primary} />
             <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Nouveau dossier</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Bannière mode déplacement */}
-      {dragNode && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="move" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
-              Déplacer : {dragNode.name}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={() => setDragNode(null)}>
-            <Ionicons name="close-circle" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
       )}
@@ -756,7 +776,7 @@ export default function FilesScreen() {
         />
       )}
 
-      {/* ── Menu contextuel custom ── */}
+      {/* -- Menu contextuel custom -- */}
       <ContextMenu
         visible={menuVisible}
         node={menuNode}
@@ -769,7 +789,7 @@ export default function FilesScreen() {
         onMove={() => { setNodeToMove(menuNode); setShowMove(true); }}
       />
 
-      {/* ── Sélecteur de dossier pour déplacement ── */}
+      {/* -- Sélecteur de dossier pour déplacement -- */}
       <FolderPicker
         visible={showMove}
         onClose={() => { setShowMove(false); setNodeToMove(null); }}
@@ -778,7 +798,7 @@ export default function FilesScreen() {
         excludeId={nodeToMove?.id}
       />
 
-      {/* ── Modal preview image ── */}
+      {/* -- Modal preview image -- */}
       <Modal visible={!!previewNode && isImage(previewNode?.mime_type)} transparent animationType="fade">
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}
@@ -802,7 +822,7 @@ export default function FilesScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Modal preview texte ── */}
+      {/* -- Modal preview texte -- */}
       <Modal visible={!!previewNode && !isImage(previewNode?.mime_type) && isText(previewNode?.mime_type, previewNode?.name)} animationType="slide">
         <View style={{ flex: 1, backgroundColor: colors.bg }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: colors.headerBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
@@ -823,7 +843,7 @@ export default function FilesScreen() {
         </View>
       </Modal>
 
-      {/* ── Modal nouveau dossier ── */}
+      {/* -- Modal nouveau dossier -- */}
       <Modal visible={showNewFolder} transparent animationType="fade">
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={() => { setShowNewFolder(false); setNewFolderName(''); }}>
           <Pressable style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: '85%' }} onPress={() => {}}>
@@ -848,7 +868,7 @@ export default function FilesScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Modal renommer ── */}
+      {/* -- Modal renommer -- */}
       <Modal visible={!!renameNode} transparent animationType="fade">
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={() => { setRenameNode(null); setRenameName(''); }}>
           <Pressable style={{ backgroundColor: colors.card, borderRadius: 16, padding: 24, width: '85%' }} onPress={() => {}}>
@@ -871,6 +891,88 @@ export default function FilesScreen() {
         </Pressable>
       </Modal>
 
-    </View>
+      {/* -- Modal preview audio/video -- */}
+      <Modal
+        visible={!!previewNode && (isAudio(previewNode?.mime_type) || isVideo(previewNode?.mime_type))}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPreviewNode(null)}
+      >
+        <Pressable
+          onPress={() => setPreviewNode(null)}
+          style={{ flex: 1, backgroundColor: '#000d', justifyContent: 'center', padding: 16 }}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()} style={{ backgroundColor: '#111', borderRadius: 16, overflow: 'hidden' }}>
+            {previewNode && (
+              <View>
+                {isAudio(previewNode.mime_type) && (
+                  <View style={{ paddingVertical: 30, alignItems: 'center', backgroundColor: '#1f2937' }}>
+                    <Ionicons name="musical-notes" size={64} color="#ec4899" />
+                    <Text style={{ color: '#fff', fontSize: 14, marginTop: 8, paddingHorizontal: 20, textAlign: 'center' }} numberOfLines={2}>
+                      {previewNode.name}
+                    </Text>
+                  </View>
+                )}
+                <Video
+                  source={{ uri: API_URL + '/api/files/' + previewNode.id + '/stream?token=' + previewToken }}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                  style={{
+                    width: '100%',
+                    height: isAudio(previewNode.mime_type) ? 50 : 280,
+                    backgroundColor: '#000',
+                  }}
+                />
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={() => setPreviewNode(null)}
+              style={{ padding: 12, alignItems: 'center', backgroundColor: '#1f2937' }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Fermer</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* -- Modal source d'upload -- */}
+      <Modal visible={showUploadMenu} transparent animationType="fade" onRequestClose={() => setShowUploadMenu(false)}>
+        <Pressable
+          onPress={() => setShowUploadMenu(false)}
+          style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' }}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()} style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 30 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 14 }}>
+              Ajouter un fichier
+            </Text>
+            {[
+              { icon: 'document-outline',  label: 'Document',           desc: 'PDF, Word, ZIP…',     action: uploadFromDocument },
+              { icon: 'images-outline',    label: 'Galerie',            desc: 'Photo ou vidéo',      action: uploadFromGallery },
+              { icon: 'camera-outline',    label: 'Prendre une photo',  desc: 'Caméra',              action: uploadFromCamera },
+            ].map((opt) => (
+              <TouchableOpacity
+                key={opt.label}
+                onPress={opt.action}
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, marginBottom: 8, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border }}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: colors.primaryBg, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                  <Ionicons name={opt.icon as any} size={22} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{opt.label}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{opt.desc}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setShowUploadMenu(false)} style={{ padding: 12, alignItems: 'center', marginTop: 4 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Annuler</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+    </SafeAreaView>
   );
 }

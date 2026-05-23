@@ -1,21 +1,50 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
-// Sur web : localhost
-// Sur téléphone : on récupère l'IP du serveur Expo automatiquement
+// Priorité :
+//   1. EXPO_PUBLIC_API_URL (env var, pour dev local pointant LAN/local)
+//   2. PRODUCTION URL par défaut (utilisé par l'APK build et Expo Go sans config)
+//
+// Pour dev local pointant un backend local, créer mobile/.env.local avec :
+//   EXPO_PUBLIC_API_URL=http://192.168.X.X:3000
+// Puis relancer Expo avec `npx expo start --clear`.
+const PRODUCTION_API_URL = 'https://api.supfile.hackthehydra.com';
+
 function getApiUrl(): string {
-  if (Platform.OS === 'web') return 'http://localhost:3000';
-  const host = Constants.expoConfig?.hostUri?.split(':')[0];
-  if (host) return `http://${host}:3000`;
-  return 'http://localhost:3000';
+  const fromEnv = (process.env as any).EXPO_PUBLIC_API_URL as string | undefined;
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv.replace(/\/api\/?$/, '');
+  }
+  return PRODUCTION_API_URL;
 }
 
 export const API_URL = getApiUrl();
+
+// Log unique au boot pour debug
+if (typeof console !== 'undefined') {
+  console.log('[SUPFile] API_URL =', API_URL, '(platform:', Platform.OS, ')');
+}
+
 export const MOBILE_URL = Platform.OS === 'web'
-  ? 'http://localhost:8081'
+  ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081')
   : `http://${Constants.expoConfig?.hostUri?.split(':')[0] || 'localhost'}:8081`;
+
+/**
+ * URL de retour OAuth — accessible par le browser/WebBrowser qui declenche le login Google.
+ * - Web (Chrome) : origin actuel + /login (ex: http://localhost:8081/login)
+ * - Native (Expo Go / standalone) : scheme deep link `mobile://login` declare dans app.json
+ *   (Linking.createURL produit le bon scheme selon l'env : exp:// en Expo Go, mobile:// en prod)
+ */
+export function getOAuthReturnUrl(): string {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') return window.location.origin + '/login';
+    return 'http://localhost:8081/login';
+  }
+  return Linking.createURL('login');
+}
 
 const api = axios.create({
   baseURL: API_URL,
@@ -33,7 +62,7 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       // Sur web : rediriger vers la page d'accueil
@@ -185,6 +214,12 @@ export const storageService = {
 
 export const userService = {
 
+  getMe: async () => {
+    const res = await api.get('/api/users/me');
+    // L'API renvoie { user: {...} } - on aplatit pour le client
+    return res.data.user || res.data;
+  },
+
   updatePassword: async (password: string, currentPassword: string) => {
     const res = await api.put('/api/users/password', { password, currentPassword });
     return res.data;
@@ -199,6 +234,18 @@ export const userService = {
     const res = await api.put('/api/users/preferences', { theme });
     return res.data;
   },
+
+  uploadAvatar: async (uri: string, filename?: string, mimeType: string = 'image/jpeg') => {
+    const form = new FormData();
+    // RN FormData accepte un objet { uri, name, type }
+    form.append('avatar', { uri, name: filename || 'avatar.jpg', type: mimeType } as any);
+    const res = await api.post('/api/users/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  getAvatarUrl: (userId: number | string) => `${API_URL}/api/users/avatar/${userId}`,
 };
 
 export const shareService = {

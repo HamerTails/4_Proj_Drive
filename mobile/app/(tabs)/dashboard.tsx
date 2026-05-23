@@ -3,15 +3,18 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
-const QUOTA = 30 * 1024 ** 3;
+const DEFAULT_QUOTA = 30 * 1024 ** 3;
 
-function fmt(b: number) {
-  if (!b) return '0 o';
-  if (b < 1024 ** 2) return (b / 1024).toFixed(0) + ' Ko';
-  if (b < 1024 ** 3) return (b / 1024 ** 2).toFixed(1) + ' Mo';
-  return (b / 1024 ** 3).toFixed(2) + ' Go';
+function fmt(b: any) {
+  const n = Number(b);
+  if (!n || n < 0) return '0 o';
+  if (n < 1024)      return n + ' o';
+  if (n < 1024 ** 2) return (n / 1024).toFixed(1) + ' Ko';
+  if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(2) + ' Mo';
+  return (n / 1024 ** 3).toFixed(2) + ' Go';
 }
 
 function fmtDate(iso: string) {
@@ -38,21 +41,23 @@ export default function DashboardScreen() {
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const used  = usage?.storage_used || 0;
-  const pct   = Math.min((used / QUOTA) * 100, 100);
+  const quota = usage?.total || DEFAULT_QUOTA;
+  const pct   = Math.min((used / quota) * 100, 100);
   const gauge = pct > 90 ? colors.danger : pct > 70 ? '#f59e0b' : colors.primary;
 
   if (loading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+    <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }} edges={['top']}>
       <ActivityIndicator size="large" color={colors.primary} />
-    </View>
+    </SafeAreaView>
   );
 
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
     >
-      <Text style={{ marginTop: 40, fontSize: 26, fontWeight: '700', color: colors.text, marginBottom: 16 }}>
+      <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, marginBottom: 16 }}>
         Tableau de bord
       </Text>
 
@@ -83,9 +88,9 @@ export default function DashboardScreen() {
           {/* Infos à droite */}
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>{fmt(used)}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>sur 30 Go</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>sur {usage?.total_readable || fmt(quota)}</Text>
             <Text style={{ fontSize: 12, color: gauge, fontWeight: '600' }}>
-              {fmt(QUOTA - used)} disponible
+              {fmt(quota - used)} disponible
             </Text>
           </View>
         </View>
@@ -128,5 +133,6 @@ export default function DashboardScreen() {
         )}
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 }
